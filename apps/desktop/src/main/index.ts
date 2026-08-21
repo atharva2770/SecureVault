@@ -36,8 +36,8 @@ function registerWindowHandlers(): void {
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1280,
+    height: 800,
     show: false,
     frame: false,
     autoHideMenuBar: true,
@@ -62,10 +62,30 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  const useWebUi =
+    process.env.DESKTOP_USE_WEB_UI !== 'false' && process.env.DESKTOP_USE_WEB_UI !== '0'
+  const webOrigin = process.env.WEB_ORIGIN?.trim() || 'http://localhost:5173'
+
+  if (useWebUi) {
+    let fellBack = false
+    const loadLegacyRenderer = (): void => {
+      if (fellBack) return
+      fellBack = true
+      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+        void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+        return
+      }
+      void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    }
+
+    mainWindow.webContents.once('did-fail-load', (_event, _code, _desc, _url, isMainFrame) => {
+      if (isMainFrame) loadLegacyRenderer()
+    })
+    void mainWindow.loadURL(webOrigin)
+  } else if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 

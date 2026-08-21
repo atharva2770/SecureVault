@@ -1,0 +1,37 @@
+import { Shield } from 'lucide-react'
+
+import PageShell from '@/layout/PageShell'
+
+export default function HelpPage(): React.JSX.Element {
+  return (
+    <PageShell title="Help" subtitle="How SecureVault protects files in the web app.">
+      <div className="space-y-4">
+        <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5">
+          <div className="mb-2 flex items-center gap-2">
+            <Shield className="size-4 text-sv-accent" />
+            <h2 className="text-sm font-semibold text-sv-text">Sign in</h2>
+          </div>
+          <p className="text-sm leading-6 text-sv-text-muted">
+            Unlock uses your username and master password. The API verifies credentials and sets an
+            httpOnly session cookie. Your password is not stored in the browser.
+          </p>
+        </section>
+        <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5">
+          <h2 className="mb-2 text-sm font-semibold text-sv-text">File password</h2>
+          <p className="text-sm leading-6 text-sv-text-muted">
+            When you upload, the display name is also the per-file access password (v1 policy). You
+            must enter that password again to open or download. Encryption and decryption happen on
+            the server; the browser never receives DEKs.
+          </p>
+        </section>
+        <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5">
+          <h2 className="mb-2 text-sm font-semibold text-sv-text">Roles and folders</h2>
+          <p className="text-sm leading-6 text-sv-text-muted">
+            Admins can add users and assign roles from the profile menu. Folder ACLs control View,
+            Edit, Copy, and Delete. Idle time locks the vault automatically.
+          </p>
+        </section>
+      </div>
+    </PageShell>
+  )
+}

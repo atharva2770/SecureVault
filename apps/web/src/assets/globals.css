@@ -63,7 +63,8 @@
 .dark {
   color-scheme: dark;
   --radius: 0.625rem;
-  --sv-titlebar-height: 44px;
+  --sv-titlebar-height: 56px;
+  --sv-header-height: 56px;
   --sv-sidebar-width: min(280px, 86vw);
   --sv-radius: 10px;
 
@@ -120,7 +121,8 @@
   @media (min-width: 768px) {
     :root,
     .dark {
-      --sv-titlebar-height: 40px;
+      --sv-titlebar-height: 56px;
+      --sv-header-height: 56px;
       --sv-sidebar-width: 240px;
     }
   }

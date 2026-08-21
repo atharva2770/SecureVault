@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowUp,
@@ -23,7 +24,6 @@ import {
   MoveRight,
   Scissors,
   Search,
-  Settings,
   Trash2,
   Upload,
   X
@@ -31,14 +31,12 @@ import {
 
 import type { FileDto, FolderDto } from '@securevault/domain'
 import { api } from '@/api/vault'
-import AdminPanel from '@/components/AdminPanel'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
 import VaultContextMenu, {
   type ContextMenuTarget,
   type VaultContextMenuState
 } from '@/components/VaultContextMenu'
-import TitleBar from '@/components/TitleBar'
 import UploadLockModal, { type PendingUpload } from '@/components/UploadLockModal'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -229,16 +227,12 @@ function FolderTreeItem({
   )
 }
 
-interface VaultBrowserProps {
-  username: string
-  onLocked: () => void
-}
-
-export default function VaultBrowser({ username, onLocked }: VaultBrowserProps): React.JSX.Element {
+export default function VaultBrowser(): React.JSX.Element {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selection, setSelection] = useState<Selection>({ type: 'root' })
   const [navHistory, setNavHistory] = useState<Selection[]>([{ type: 'root' }])
-  const [search, setSearch] = useState('')
+  const search = searchParams.get('q') ?? ''
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null)
@@ -259,28 +253,17 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
   const [clipboard, setClipboard] = useState<VaultClipboard | null>(null)
   const [contextMenu, setContextMenu] = useState<VaultContextMenuState | null>(null)
   const [pasteTargetFolderId, setPasteTargetFolderId] = useState<string | null>(null)
-  const [showAdmin, setShowAdmin] = useState(false)
-  const [showMyAccess, setShowMyAccess] = useState(false)
+
+  function setSearch(value: string): void {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set('q', value)
+    else next.delete('q')
+    setSearchParams(next, { replace: true })
+  }
 
   const sidebarQuery = useQuery({
     queryKey: ['sidebar'],
     queryFn: () => api.ensureSidebar()
-  })
-
-  const sessionQuery = useQuery({
-    queryKey: ['session'],
-    queryFn: () => api.auth.getSession()
-  })
-
-  const isAdmin = Boolean(
-    sessionQuery.data?.user?.roles?.some((r) => r.toUpperCase() === 'ADMIN') ||
-      sessionQuery.data?.user?.role?.toLowerCase() === 'admin'
-  )
-
-  const myAccessQuery = useQuery({
-    queryKey: ['my-access'],
-    queryFn: () => api.admin.getMyAccess(),
-    enabled: showMyAccess
   })
 
   const categories = sidebarQuery.data?.categories ?? []
@@ -711,11 +694,6 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
     })
   }
 
-  async function handleMasterLock(): Promise<void> {
-    await api.auth.lockVault()
-    onLocked()
-  }
-
   function handleFileInput(files: FileList | null): void {
     if (!files?.length) return
     enqueueUploads(
@@ -846,57 +824,21 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
     )
   }, [clipboard, pasteTargetFolderId, selection, folders])
 
-  if (showAdmin && isAdmin) {
-    return (
-      <AdminPanel
-        username={username}
-        onBack={() => {
-          setShowAdmin(false)
-          void queryClient.invalidateQueries({ queryKey: ['sidebar'] })
-          void queryClient.invalidateQueries({ queryKey: ['files'] })
-        }}
-        onLocked={onLocked}
-      />
-    )
-  }
-
   const sidebar = (
     <>
       <div className="flex items-center justify-between gap-2 border-b border-sv-border px-3 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-sv-text-muted">
           Navigation
         </p>
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="secondary"
-            className="h-7 gap-1 px-2 text-[11px]"
-            onClick={() => setShowMyAccess(true)}
-          >
-            <Eye className="size-3" />
-            Access
-          </Button>
-          {isAdmin ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-7 gap-1 px-2 text-[11px]"
-              onClick={() => setShowAdmin(true)}
-            >
-              <Settings className="size-3" />
-              Admin
-            </Button>
-          ) : null}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-8 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close navigation"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close navigation"
+        >
+          <X className="size-4" />
+        </Button>
       </div>
       <nav className="flex-1 overflow-y-auto p-2">
         <button
@@ -937,16 +879,7 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
   )
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <TitleBar
-        title="SecureVault"
-        unlocked
-        username={username}
-        onMasterLock={() => {
-          void handleMasterLock()
-        }}
-      />
-
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <div className="relative flex min-h-0 flex-1">
         {/* Mobile drawer backdrop */}
         {sidebarOpen ? (
@@ -962,7 +895,7 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
         <aside
           className={cn(
             'z-40 flex w-[min(100%,var(--sv-sidebar-width))] shrink-0 flex-col border-r border-sv-border bg-sv-surface',
-            'fixed inset-y-0 left-0 top-[var(--sv-titlebar-height)] transition-transform duration-200 md:static md:translate-x-0',
+            'fixed inset-y-0 left-0 top-[var(--sv-header-height)] transition-transform duration-200 md:static md:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
           )}
           onMouseMove={() => void api.auth.touch()}
@@ -1568,61 +1501,6 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
             void moveFileToFolder(moveTarget.fileId, targetFolderId)
           }}
         />
-      ) : null}
-
-      {showMyAccess ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface shadow-xl">
-            <div className="flex items-center justify-between border-b border-sv-border px-4 py-3">
-              <div>
-                <h2 className="text-sm font-semibold text-sv-text">My access</h2>
-                <p className="text-xs text-sv-text-muted">Folders you can view and your rights</p>
-              </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="size-8"
-                onClick={() => setShowMyAccess(false)}
-                aria-label="Close"
-              >
-                <X className="size-4" />
-              </Button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {myAccessQuery.isLoading ? (
-                <div className="flex items-center gap-2 p-6 text-sv-text-muted">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading…
-                </div>
-              ) : (myAccessQuery.data ?? []).length === 0 ? (
-                <p className="p-4 text-xs text-sv-text-muted">
-                  No folders with View access yet.
-                </p>
-              ) : (
-                <ul className="divide-y divide-sv-border">
-                  {(myAccessQuery.data ?? []).map((entry) => (
-                    <li
-                      key={entry.folderId}
-                      className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <p className="min-w-0 truncate text-sm text-sv-text">{entry.path}</p>
-                      <p className="shrink-0 text-xs text-sv-text-muted">
-                        {[
-                          entry.rights.view && 'View',
-                          entry.rights.edit && 'Edit',
-                          entry.rights.copy && 'Copy',
-                          entry.rights.delete && 'Delete'
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
       ) : null}
     </div>
   )

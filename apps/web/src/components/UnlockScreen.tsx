@@ -1,20 +1,23 @@
 import { useState } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { Loader2, Shield } from 'lucide-react'
 
 import { api } from '@/api/vault'
-import TitleBar from '@/components/TitleBar'
+import { useAuth } from '@/auth/AuthProvider'
 import { Button } from '@/components/ui/button'
 
-interface UnlockScreenProps {
-  onUnlocked: (username: string) => void
-}
-
-export default function UnlockScreen({ onUnlocked }: UnlockScreenProps): React.JSX.Element {
+export default function UnlockScreen(): React.JSX.Element {
+  const { user, acceptAuth } = useAuth()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+
+  if (user) {
+    return <Navigate to="/" replace />
+  }
 
   async function submit(event: React.FormEvent): Promise<void> {
     event.preventDefault()
@@ -25,7 +28,8 @@ export default function UnlockScreen({ onUnlocked }: UnlockScreenProps): React.J
         mode === 'login'
           ? await api.auth.login({ username, password })
           : await api.auth.register({ username, password })
-      onUnlocked(result.user.username)
+      acceptAuth(result)
+      navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed.')
     } finally {
@@ -35,8 +39,11 @@ export default function UnlockScreen({ onUnlocked }: UnlockScreenProps): React.J
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <TitleBar title="SecureVault" />
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <header className="flex h-[var(--sv-header-height)] items-center gap-2 border-b border-sv-border bg-sv-surface px-4">
+        <Shield className="size-5 text-sv-accent" />
+        <span className="text-sm font-semibold text-sv-text">SecureVault</span>
+      </header>
       <main className="flex flex-1 items-center justify-center p-6">
         <form
           onSubmit={(e) => {

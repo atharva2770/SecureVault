@@ -156,7 +156,7 @@ npm run dev
 
 The app opens with a frameless window. The **first registered user** automatically receives the **Admin** role.
 
-### 6. Web UI (optional)
+### 6. Web UI
 
 In a second terminal, start the API, then the web app:
 
@@ -166,6 +166,12 @@ npm run dev:web
 ```
 
 Open http://localhost:5173 — Vite proxies `/api` to port 4000 so the session cookie stays on `localhost`.
+
+Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
+
+### 7. Desktop via the same API (Phase 5)
+
+With `DESKTOP_USE_WEB_UI=true` (default in `.env`), `npm run dev:desktop` opens the web UI inside Electron. Start **API + web** first. If http://localhost:5173 is down, the window falls back to the legacy IPC renderer.
 
 ---
 
@@ -198,7 +204,7 @@ securevault/
 ├── apps/
 │   ├── desktop/                 # Electron desktop client (IPC)
 │   ├── api/                     # HTTP API — session auth + encrypted blob streaming
-│   └── web/                     # React web UI (Vite) on port 5173
+│   └── web/                     # React web UI (Vite) on port 5173 — profile, account, admin pages
 ├── packages/
 │   ├── domain/                  # DTOs, RBAC, access-policy
 │   ├── db/                      # Prisma schema, migrations, DBService
@@ -269,7 +275,7 @@ Core tables include:
 - **Phase 2 (done)** — local Fastify API on port 4000; session cookie auth; folders/files list/admin ACL JSON; same SQL Server
 - **Phase 3 (done)** — encrypted blobs + local KMS wrapping; streaming upload/download; per-file password verified on the API
 - **Phase 4 (done)** — web UI (Unlock, VaultBrowser, Admin) over HTTP on port 5173
-- **Phase 5** — optional: desktop talks to the same API
+- **Phase 5 (done)** — desktop loads the web UI (`WEB_ORIGIN`) and uses the same HTTP API; set `DESKTOP_USE_WEB_UI=false` for the legacy IPC renderer
 
 ---
 

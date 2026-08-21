@@ -1,9 +1,21 @@
-import { useEffect, useState } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
-import { api, SessionLockedError } from '@/api/vault'
+import { AuthProvider } from '@/auth/AuthProvider'
+import { RequireAclAdmin, RequireAdmin, RequireAuth } from '@/auth/guards'
 import UnlockScreen from '@/components/UnlockScreen'
-import VaultBrowser from '@/components/VaultBrowser'
+import AppLayout from '@/layout/AppLayout'
+import FolderPermissionsPage from '@/pages/admin/FolderPermissionsPage'
+import UserRightsPage from '@/pages/admin/UserRightsPage'
+import UsersPage from '@/pages/admin/UsersPage'
+import ChangePasswordPage from '@/pages/ChangePasswordPage'
+import HelpPage from '@/pages/HelpPage'
+import MyAccessPage from '@/pages/MyAccessPage'
+import ProfilePage from '@/pages/ProfilePage'
+import SettingsPage from '@/pages/SettingsPage'
+import VaultPage from '@/pages/VaultPage'
+import { ThemeProvider } from '@/theme/ThemeProvider'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,95 +26,72 @@ const queryClient = new QueryClient({
   }
 })
 
-function AppShell(): React.JSX.Element {
-  const [username, setUsername] = useState<string | null>(null)
-  const [booting, setBooting] = useState(true)
-  const [bootError, setBootError] = useState<string | null>(null)
-
+function QueryReset(): null {
+  const client = useQueryClient()
   useEffect(() => {
-    let active = true
-
-    async function boot(): Promise<void> {
-      try {
-        const session = await api.auth.getSession()
-        if (!active) return
-        if (session.unlocked && session.user) {
-          setUsername(session.user.username)
-        }
-      } catch (error) {
-        if (!active) return
-        if (error instanceof SessionLockedError) {
-          setUsername(null)
-          return
-        }
-        setBootError(error instanceof Error ? error.message : 'Failed to reach SecureVault API.')
-      } finally {
-        if (active) setBooting(false)
-      }
-    }
-
-    void boot()
-
     const onLocked = (): void => {
-      setUsername(null)
-      queryClient.clear()
+      client.clear()
     }
     window.addEventListener('sv:locked', onLocked)
-
-    return () => {
-      active = false
-      window.removeEventListener('sv:locked', onLocked)
-    }
-  }, [])
-
-  if (booting) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-sv-text-muted">
-        Loading SecureVault…
-      </div>
-    )
-  }
-
-  if (bootError && !username) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-        <p className="text-sm font-medium text-sv-danger">Cannot reach the API</p>
-        <p className="max-w-md text-xs text-sv-text-muted">{bootError}</p>
-        <p className="max-w-md text-xs text-sv-text-muted">
-          Start the API with <code className="text-sv-text">npm run dev:api</code>, then refresh.
-        </p>
-      </div>
-    )
-  }
-
-  if (!username) {
-    return (
-      <UnlockScreen
-        onUnlocked={(name) => {
-          setUsername(name)
-          setBootError(null)
-        }}
-      />
-    )
-  }
-
-  return (
-    <VaultBrowser
-      username={username}
-      onLocked={() => {
-        setUsername(null)
-        queryClient.clear()
-      }}
-    />
-  )
+    return () => window.removeEventListener('sv:locked', onLocked)
+  }, [client])
+  return null
 }
 
 export default function App(): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="dark h-full">
-        <AppShell />
-      </div>
+      <QueryReset />
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <div className="h-full">
+              <Routes>
+                <Route path="/login" element={<UnlockScreen />} />
+                <Route
+                  element={
+                    <RequireAuth>
+                      <AppLayout />
+                    </RequireAuth>
+                  }
+                >
+                  <Route path="/" element={<VaultPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/account/password" element={<ChangePasswordPage />} />
+                  <Route path="/account/access" element={<MyAccessPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/help" element={<HelpPage />} />
+                  <Route
+                    path="/admin/users"
+                    element={
+                      <RequireAdmin>
+                        <UsersPage />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/admin/rights"
+                    element={
+                      <RequireAdmin>
+                        <UserRightsPage />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/admin/folders"
+                    element={
+                      <RequireAclAdmin>
+                        <FolderPermissionsPage />
+                      </RequireAclAdmin>
+                    }
+                  />
+                </Route>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </div>
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }
