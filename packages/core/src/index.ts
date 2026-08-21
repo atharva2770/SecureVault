@@ -21,5 +21,21 @@ export { RbacService } from './rbac/RbacService'
 export { FolderService } from './folders/FolderService'
 export { AdminService } from './admin/AdminService'
 export { FileQueryService } from './files/FileQueryService'
+export { VaultFileService } from './files/VaultFileService'
+export { toFileDto, guessMime, safeFileName } from './files/fileDto'
 export { AuthCredentials } from './auth/AuthCredentials'
 export type { AuthCredentialResult, VerifiedUser, AuthAuditMeta } from './auth/AuthCredentials'
+
+export {
+  BLOB_URI_SCHEME,
+  LOCAL_BLOB_ADAPTER,
+  WEB_FILE_SOURCE,
+  formatBlobUri,
+  parseBlobUri,
+  isWebBlobUri
+} from './blobs/blobUri'
+export type { BlobStore } from './blobs/BlobStore'
+export { LocalBlobStore } from './blobs/LocalBlobStore'
+
+export type { KeyWrappingProvider } from './kms/KeyWrappingProvider'
+export { LocalKmsProvider } from './kms/LocalKmsProvider'

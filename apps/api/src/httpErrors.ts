@@ -12,22 +12,28 @@ export class HttpError extends Error {
 export function toHttpError(error: unknown): HttpError {
   if (error instanceof HttpError) return error
   const message = error instanceof Error ? error.message : 'Unexpected error.'
-  if (message === 'Access denied.' || message.includes('Admin privileges')) {
+  const lower = message.toLowerCase()
+  if (lower === 'access denied.' || lower.includes('admin privileges')) {
     return new HttpError(403, message)
   }
-  if (message.includes('Too many')) {
+  if (lower.includes('too many') || lower.includes('file size')) {
     return new HttpError(429, message)
   }
-  if (message.includes('not found') || message.includes('not Found')) {
+  if (lower.includes('not found')) {
     return new HttpError(404, message)
   }
+  if (lower.includes('incorrect file password')) {
+    return new HttpError(403, message)
+  }
   if (
-    message.includes('required') ||
-    message.includes('already') ||
-    message.includes('must be') ||
-    message.includes('Invalid') ||
-    message.includes('incorrect') ||
-    message.includes('disabled')
+    lower.includes('required') ||
+    lower.includes('already') ||
+    lower.includes('must be') ||
+    lower.includes('invalid') ||
+    lower.includes('incorrect') ||
+    lower.includes('disabled') ||
+    lower.includes('cannot be streamed') ||
+    lower.includes('too long')
   ) {
     return new HttpError(400, message)
   }

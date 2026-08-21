@@ -1,5 +1,6 @@
 import cookie from '@fastify/cookie'
 import cors from '@fastify/cors'
+import multipart from '@fastify/multipart'
 import Fastify from 'fastify'
 
 import { apiConfig } from './config'
@@ -10,7 +11,10 @@ import { registerFileRoutes } from './routes/files'
 import { registerFolderRoutes } from './routes/folders'
 
 export async function buildApi() {
-  const app = Fastify({ logger: true })
+  const app = Fastify({
+    logger: true,
+    bodyLimit: apiConfig.maxUploadBytes
+  })
 
   await app.register(cors, {
     origin: apiConfig.webOrigin,
@@ -19,6 +23,15 @@ export async function buildApi() {
 
   await app.register(cookie, {
     secret: apiConfig.cookieSecret
+  })
+
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fileSize: apiConfig.maxUploadBytes,
+      fields: 16,
+      fieldSize: 16 * 1024
+    }
   })
 
   await registerAuthGuard(app)
@@ -30,7 +43,8 @@ export async function buildApi() {
   app.get('/health', async () => ({
     ok: true,
     service: 'securevault-api',
-    blobs: false
+    blobs: true,
+    kms: 'local'
   }))
 
   return app

@@ -9,7 +9,7 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdir, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
-import { Transform } from 'node:stream'
+import { Transform, type Readable, type Writable } from 'node:stream'
 import * as argon2 from 'argon2'
 
 /** Default Argon2id memory cost in KiB (64 MiB). */
@@ -54,6 +54,8 @@ export interface EncryptFileResult {
   authTag: Buffer
   /** Lowercase hex SHA-256 of the plaintext. */
   checksum: string
+  /** Plaintext size in bytes (streamed; not loaded into memory). */
+  plaintextBytes: number
 }
 
 /**
@@ -170,15 +172,78 @@ export class CryptoService {
     dek: Buffer,
     encPath?: string
   ): Promise<EncryptFileResult> {
-    this.assertAes256Key(dek, 'DEK')
-
     const outPath = encPath ?? `${filePath}.enc`
-    await mkdir(dirname(outPath), { recursive: true })
+    return this.encryptReadable(createReadStream(filePath), dek, outPath)
+  }
+
+  /**
+   * Streaming AES-256-GCM encrypt from any readable source.
+   * Plaintext is never fully buffered in memory.
+   */
+  async encryptReadable(
+    source: Readable,
+    dek: Buffer,
+    encPath: string
+  ): Promise<EncryptFileResult> {
+    this.assertAes256Key(dek, 'DEK')
+    await mkdir(dirname(encPath), { recursive: true })
 
     const iv = randomBytes(GCM_IV_BYTES)
     const cipher = createCipheriv('aes-256-gcm', dek, iv)
     const hash = createHash('sha256')
+    let plaintextBytes = 0
 
+    const hashingTransform = new Transform({
+      transform(chunk: Buffer, _encoding, callback): void {
+        plaintextBytes += chunk.length
+        hash.update(chunk)
+        callback(null, chunk)
+      }
+    })
+
+    try {
+      await pipeline(source, hashingTransform, cipher, createWriteStream(encPath))
+    } catch (error) {
+      await unlink(encPath).catch(() => undefined)
+      throw error
+    }
+
+    return {
+      encPath,
+      iv,
+      authTag: cipher.getAuthTag(),
+      checksum: hash.digest('hex'),
+      plaintextBytes
+    }
+  }
+
+  /**
+   * Streaming AES-256-GCM decrypt into a writable destination.
+   * Verifies the SHA-256 checksum of recovered plaintext after the stream ends.
+   */
+  async decryptToWritable(
+    encPath: string,
+    dek: Buffer,
+    iv: Buffer,
+    authTag: Buffer,
+    expectedChecksum: string,
+    destination: Writable
+  ): Promise<void> {
+    this.assertAes256Key(dek, 'DEK')
+
+    if (iv.length !== GCM_IV_BYTES) {
+      throw new Error(`IV must be ${GCM_IV_BYTES} bytes; got ${iv.length}`)
+    }
+    if (authTag.length !== GCM_AUTH_TAG_BYTES) {
+      throw new Error(
+        `Auth tag must be ${GCM_AUTH_TAG_BYTES} bytes; got ${authTag.length}`
+      )
+    }
+
+    const decipher = createDecipheriv('aes-256-gcm', dek, iv)
+    decipher.setAuthTag(authTag)
+
+    const hash = createHash('sha256')
     const hashingTransform = new Transform({
       transform(chunk: Buffer, _encoding, callback): void {
         hash.update(chunk)
@@ -186,23 +251,16 @@ export class CryptoService {
       }
     })
 
-    try {
-      await pipeline(
-        createReadStream(filePath),
-        hashingTransform,
-        cipher,
-        createWriteStream(outPath)
-      )
-    } catch (error) {
-      await unlink(outPath).catch(() => undefined)
-      throw error
-    }
+    await pipeline(createReadStream(encPath), decipher, hashingTransform, destination)
 
-    return {
-      encPath: outPath,
-      iv,
-      authTag: cipher.getAuthTag(),
-      checksum: hash.digest('hex')
+    const actualChecksum = hash.digest('hex')
+    const expected = Buffer.from(expectedChecksum.toLowerCase(), 'utf8')
+    const actual = Buffer.from(actualChecksum, 'utf8')
+
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      throw new Error(
+        'Checksum verification failed: decrypted plaintext does not match expected SHA-256'
+      )
     }
   }
 
@@ -242,41 +300,18 @@ export class CryptoService {
       outPath ?? join(dirname(encPath), `${Date.now()}-decrypted.bin`)
     await mkdir(dirname(destination), { recursive: true })
 
-    const decipher = createDecipheriv('aes-256-gcm', dek, iv)
-    decipher.setAuthTag(authTag)
-
-    const hash = createHash('sha256')
-    const hashingTransform = new Transform({
-      transform(chunk: Buffer, _encoding, callback): void {
-        hash.update(chunk)
-        callback(null, chunk)
-      }
-    })
-
     try {
-      await pipeline(
-        createReadStream(encPath),
-        decipher,
-        hashingTransform,
+      await this.decryptToWritable(
+        encPath,
+        dek,
+        iv,
+        authTag,
+        expectedChecksum,
         createWriteStream(destination)
       )
     } catch (error) {
       await unlink(destination).catch(() => undefined)
       throw error
-    }
-
-    const actualChecksum = hash.digest('hex')
-    const expected = Buffer.from(expectedChecksum.toLowerCase(), 'utf8')
-    const actual = Buffer.from(actualChecksum, 'utf8')
-
-    if (
-      expected.length !== actual.length ||
-      !timingSafeEqual(expected, actual)
-    ) {
-      await unlink(destination).catch(() => undefined)
-      throw new Error(
-        'Checksum verification failed: decrypted plaintext does not match expected SHA-256'
-      )
     }
 
     return destination

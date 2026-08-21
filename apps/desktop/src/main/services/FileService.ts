@@ -14,7 +14,7 @@ import type {
   MoveFilePayload
 } from '../../shared/ipc'
 import { secureZero } from '../utils/secure'
-import { AccessControlService, FileQueryService } from '@securevault/core'
+import { AccessControlService, FileQueryService, isWebBlobUri } from '@securevault/core'
 import { AuditAction, AuditService } from './AuditService'
 import { CryptoService } from './CryptoService'
 import { DBService } from '@securevault/db'
@@ -345,6 +345,7 @@ export class FileService {
     if (!targetFolderId) throw new Error('Target folder is required.')
 
     const existing = await this.requireAccessibleFile(fileId)
+    this.assertDesktopBlob(existing.storedBlobPath)
     if (!existing.folderId) {
       throw new Error('File has no folder; cannot copy.')
     }
@@ -444,6 +445,7 @@ export class FileService {
   ): Promise<GetFileResult> {
     const { userId, kek } = actor
     const record = await this.requireAccessibleFile(fileId)
+    this.assertDesktopBlob(record.storedBlobPath)
     await this.assertFilePassword(record.accessPasswordHash, password)
 
     let dek: Buffer | null = null
@@ -497,6 +499,14 @@ export class FileService {
       throw new Error('File not found.')
     }
     return record
+  }
+
+  private assertDesktopBlob(storedBlobPath: string): void {
+    if (isWebBlobUri(storedBlobPath)) {
+      throw new Error(
+        'This file was uploaded through the web API and cannot be opened in the desktop app yet.'
+      )
+    }
   }
 
   private async assertFilePassword(

@@ -14,7 +14,8 @@
     "@securevault/core": "*",
     "@securevault/db": "*",
     "@securevault/domain": "*",
-    "fastify": "^5.6.1"
+    "fastify": "^5.6.1",
+    "@fastify/multipart": "^9.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",

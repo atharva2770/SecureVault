@@ -79,6 +79,7 @@ securevault-updater/
 # Local encrypted vault blobs during development (if stored in-repo for testing)
 /vault-data/
 /encrypted-blobs/
+/data/
 
 # Temporary files
 tmp/
