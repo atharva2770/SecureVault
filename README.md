@@ -42,13 +42,17 @@ This repository is an **npm workspace**. The desktop Electron app still talks ov
 
 ```
 ┌──────────────────────────┐     ┌──────────────────────────────┐
-│ apps/desktop (Electron)  │     │ apps/api (Fastify :4000)     │
-│ React UI ──IPC── Main    │     │ cookie session + multipart   │
-└────────────┬─────────────┘     └──────────────┬───────────────┘
-             │                                  │
-             ▼                                  ▼
+│ apps/desktop (Electron)  │     │ apps/web (Vite :5173)        │
+│ React UI ──IPC── Main    │     │ React UI ──HTTP cookie──┐    │
+└────────────┬─────────────┘     └─────────────────────────┼────┘
+             │                                             │
+             │                    ┌────────────────────────┘
+             │                    ▼
+             │         apps/api (Fastify :4000)
+             │         cookie session + encrypted blobs
+             ▼                    │
       @securevault/core  (ACL, folders, admin, crypto, VaultFileService)
-             │
+             │                    │
              ├── @securevault/domain   @securevault/db (SQL Server)
              │
              ├── Desktop blobs: Electron userData + user KEK wrap
@@ -57,7 +61,7 @@ This repository is an **npm workspace**. The desktop Electron app still talks ov
 
 **Security rules**
 
-- The renderer and future browser UI never receive KEK/DEK material.
+- The renderer and browser UI never receive KEK/DEK material.
 - ACL and permission checks are enforced in `@securevault/core` (`AccessControlService`).
 - Encrypted file blobs stay on disk (or later object storage); only metadata and wrapped keys are in the database.
 - The web API does **not** keep a user KEK in RAM. Web DEKs are wrapped with `VAULT_KMS_WRAP_KEY` (local KMS stand-in; swap for Azure Key Vault / AWS KMS later).
@@ -152,6 +156,17 @@ npm run dev
 
 The app opens with a frameless window. The **first registered user** automatically receives the **Admin** role.
 
+### 6. Web UI (optional)
+
+In a second terminal, start the API, then the web app:
+
+```bash
+npm run dev:api
+npm run dev:web
+```
+
+Open http://localhost:5173 — Vite proxies `/api` to port 4000 so the session cookie stays on `localhost`.
+
 ---
 
 ## Scripts
@@ -160,6 +175,7 @@ The app opens with a frameless window. The **first registered user** automatical
 | --- | --- |
 | `npm run dev` | Start the desktop app (Electron) with hot reload |
 | `npm run dev:api` | Start the local web API on http://127.0.0.1:4000 |
+| `npm run dev:web` | Start the React web UI on http://localhost:5173 |
 | `npm run build` | Typecheck and build the desktop app |
 | `npm run start` | Preview the production desktop build |
 | `npm run build:win` | Build Windows installer (NSIS) |
@@ -181,7 +197,8 @@ The app opens with a frameless window. The **first registered user** automatical
 securevault/
 ├── apps/
 │   ├── desktop/                 # Electron desktop client (IPC)
-│   └── api/                     # HTTP API — session auth + encrypted blob streaming
+│   ├── api/                     # HTTP API — session auth + encrypted blob streaming
+│   └── web/                     # React web UI (Vite) on port 5173
 ├── packages/
 │   ├── domain/                  # DTOs, RBAC, access-policy
 │   ├── db/                      # Prisma schema, migrations, DBService
@@ -251,7 +268,7 @@ Core tables include:
 - **Phase 1 (done)** — single authz engine (`resolveFolderRightsPure`); services take `userId` / actor; desktop IPC still reads `VaultSession`
 - **Phase 2 (done)** — local Fastify API on port 4000; session cookie auth; folders/files list/admin ACL JSON; same SQL Server
 - **Phase 3 (done)** — encrypted blobs + local KMS wrapping; streaming upload/download; per-file password verified on the API
-- **Phase 4** — web UI (Unlock, VaultBrowser, Admin) over HTTP
+- **Phase 4 (done)** — web UI (Unlock, VaultBrowser, Admin) over HTTP on port 5173
 - **Phase 5** — optional: desktop talks to the same API
 
 ---

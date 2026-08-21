@@ -11,12 +11,6 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "types": ["electron-vite/node"],
-    "baseUrl": ".",
-    "paths": {
-      "@securevault/domain": ["../../packages/domain/src/index.ts"],
-      "@securevault/db": ["../../packages/db/src/index.ts"],
-      "@securevault/core": ["../../packages/core/src/index.ts"]
-    }
+    "types": ["electron-vite/node"]
   }
 }

@@ -11,6 +11,7 @@
     "dev": "npm run dev -w @securevault/desktop",
     "dev:desktop": "npm run dev -w @securevault/desktop",
     "dev:api": "npm run dev -w @securevault/api",
+    "dev:web": "npm run dev -w @securevault/web",
     "start": "npm run start -w @securevault/desktop",
     "build": "npm run build -w @securevault/desktop",
     "build:win": "npm run build:win -w @securevault/desktop",
