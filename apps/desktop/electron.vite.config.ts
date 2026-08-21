@@ -5,7 +5,8 @@ import react from '@vitejs/plugin-react'
 
 const workspacePackages = {
   '@securevault/domain': resolve(__dirname, '../../packages/domain/src/index.ts'),
-  '@securevault/db': resolve(__dirname, '../../packages/db/src/index.ts')
+  '@securevault/db': resolve(__dirname, '../../packages/db/src/index.ts'),
+  '@securevault/core': resolve(__dirname, '../../packages/core/src/index.ts')
 }
 
 const nodeOnlyExternal = [

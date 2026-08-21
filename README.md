@@ -154,6 +154,7 @@ The app opens with a frameless window. The **first registered user** automatical
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the desktop app (Electron) with hot reload |
+| `npm run dev:api` | Start the local web API on http://127.0.0.1:4000 |
 | `npm run build` | Typecheck and build the desktop app |
 | `npm run start` | Preview the production desktop build |
 | `npm run build:win` | Build Windows installer (NSIS) |
@@ -174,17 +175,14 @@ The app opens with a frameless window. The **first registered user** automatical
 ```
 securevault/
 ├── apps/
-│   └── desktop/                 # Electron desktop client (IPC, unchanged UX)
-│       ├── src/main/            # Auth, crypto, files, folders, RBAC, audit
-│       ├── src/preload/         # Secure contextBridge (window.api)
-│       ├── src/renderer/        # React UI
-│       └── src/shared/          # Electron IPC channel names
+│   ├── desktop/                 # Electron desktop client (IPC)
+│   └── api/                     # HTTP API (Phase 2) — JSON, no blobs yet
 ├── packages/
-│   ├── domain/                  # DTOs, RBAC, access-policy (desktop + future web)
-│   └── db/                      # Prisma schema, migrations, DBService
-│       └── prisma/
-├── .env.example                 # SQL Server connection template
-└── package.json                 # Workspace root
+│   ├── domain/                  # DTOs, RBAC, access-policy
+│   ├── db/                      # Prisma schema, migrations, DBService
+│   └── core/                    # Authz, folders, admin, credentials (desktop + API)
+├── .env.example
+└── package.json
 ```
 
 ---
@@ -244,7 +242,7 @@ Core tables include:
 
 - **Phase 0 (done)** — npm workspace; Prisma + domain packages; desktop still uses IPC
 - **Phase 1 (done)** — single authz engine (`resolveFolderRightsPure`); services take `userId` / actor; desktop IPC still reads `VaultSession`
-- **Phase 2** — web API (auth, folders, files metadata, admin ACL) on the same SQL Server database
+- **Phase 2 (done)** — local Fastify API on port 4000; session cookie auth; folders/files list/admin ACL JSON; same SQL Server; no blob upload/download yet
 - **Phase 3** — encrypted blobs + KMS wrapping; streaming upload/download
 - **Phase 4** — web UI (Unlock, VaultBrowser, Admin) over HTTP
 - **Phase 5** — optional: desktop talks to the same API

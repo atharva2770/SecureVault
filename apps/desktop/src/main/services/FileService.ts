@@ -14,7 +14,7 @@ import type {
   MoveFilePayload
 } from '../../shared/ipc'
 import { secureZero } from '../utils/secure'
-import { AccessControlService } from './AccessControlService'
+import { AccessControlService, FileQueryService } from '@securevault/core'
 import { AuditAction, AuditService } from './AuditService'
 import { CryptoService } from './CryptoService'
 import { DBService } from '@securevault/db'
@@ -249,39 +249,7 @@ export class FileService {
   }
 
   async listFiles(userId: string, filter: ListFilesFilter = {}): Promise<FileDto[]> {
-
-    if (filter.folderId) {
-      await this.acl.require(filter.folderId, 'view', userId)
-    }
-
-    const where: {
-      isDeleted: boolean
-      folderId?: string | null
-      categoryId?: string
-    } = {
-      isDeleted: false
-    }
-
-    if (filter.folderId !== undefined && filter.folderId !== null) {
-      where.folderId = filter.folderId
-    } else if (filter.categoryId) {
-      where.categoryId = filter.categoryId
-    }
-
-    const files = await this.db.prisma.file.findMany({
-      where,
-      include: { category: true },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    const result: FileDto[] = []
-    for (const file of files) {
-      if (!file.folderId) continue
-      const rights = await this.acl.getEffectiveRights(file.folderId, userId)
-      if (!rights.view) continue
-      result.push(toFileDto(file))
-    }
-    return result
+    return FileQueryService.getInstance().listFiles(userId, filter)
   }
 
   async deleteFile(userId: string, fileId: string): Promise<FileDto> {

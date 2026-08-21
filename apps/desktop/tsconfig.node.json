@@ -6,7 +6,8 @@
     "src/preload/**/*",
     "src/shared/**/*",
     "../../packages/domain/src/**/*",
-    "../../packages/db/src/**/*"
+    "../../packages/db/src/**/*",
+    "../../packages/core/src/**/*"
   ],
   "compilerOptions": {
     "composite": true,
@@ -14,7 +15,8 @@
     "baseUrl": ".",
     "paths": {
       "@securevault/domain": ["../../packages/domain/src/index.ts"],
-      "@securevault/db": ["../../packages/db/src/index.ts"]
+      "@securevault/db": ["../../packages/db/src/index.ts"],
+      "@securevault/core": ["../../packages/core/src/index.ts"]
     }
   }
 }
