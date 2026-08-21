@@ -13,13 +13,17 @@ import type {
   ListFilesFilter,
   MoveFilePayload
 } from '../../shared/ipc'
-import { VaultSession } from '../session/VaultSession'
 import { secureZero } from '../utils/secure'
 import { AccessControlService } from './AccessControlService'
 import { AuditAction, AuditService } from './AuditService'
 import { CryptoService } from './CryptoService'
 import { DBService } from '@securevault/db'
 import { FolderService } from './FolderService'
+
+export interface FileActor {
+  userId: string
+  kek: Buffer
+}
 
 const MIME_BY_EXT: Record<string, string> = {
   '.txt': 'text/plain',
@@ -50,7 +54,6 @@ export class FileService {
 
   private readonly db = DBService.getInstance()
   private readonly crypto = CryptoService.getInstance()
-  private readonly session = VaultSession.getInstance()
   private readonly audit = AuditService.getInstance()
   private readonly folders = FolderService.getInstance()
   private readonly acl = AccessControlService.getInstance()
@@ -68,9 +71,8 @@ export class FileService {
    * Encrypts a source file into the vault.
    * Password policy (v1): access password === trimmed displayName.
    */
-  async addFile(payload: AddFilePayload): Promise<FileDto> {
-    const userId = this.session.requireUserId()
-    const kek = this.session.requireKek()
+  async addFile(actor: FileActor, payload: AddFilePayload): Promise<FileDto> {
+    const { userId, kek } = actor
 
     const sourcePath = payload.sourcePath?.trim()
     const displayName = payload.displayName?.trim()
@@ -103,7 +105,7 @@ export class FileService {
       }
       await this.acl.require(folderId, 'edit', userId)
     } else {
-      folderId = await this.folders.getCategoryRootFolderId(categoryId)
+      folderId = await this.folders.getCategoryRootFolderId(userId, categoryId)
       await this.acl.require(folderId, 'edit', userId)
     }
 
@@ -168,9 +170,9 @@ export class FileService {
   /**
    * Views/opens a file after password check (OS default app via shell).
    */
-  async openFile(fileId: string, password: string): Promise<GetFileResult> {
-    await this.acl.requireFile(fileId, 'view')
-    const result = await this.decryptWithPassword(fileId, password)
+  async openFile(actor: FileActor, fileId: string, password: string): Promise<GetFileResult> {
+    await this.acl.requireFile(fileId, 'view', actor.userId)
+    const result = await this.decryptWithPassword(actor, fileId, password)
     const openError = await shell.openPath(result.tempPath)
     if (openError) {
       await unlink(result.tempPath).catch(() => undefined)
@@ -182,21 +184,21 @@ export class FileService {
   /**
    * Decrypts to temp after password check (does not auto-open).
    */
-  async getFile(fileId: string, password: string): Promise<GetFileResult> {
-    await this.acl.requireFile(fileId, 'view')
-    return this.decryptWithPassword(fileId, password)
+  async getFile(actor: FileActor, fileId: string, password: string): Promise<GetFileResult> {
+    await this.acl.requireFile(fileId, 'view', actor.userId)
+    return this.decryptWithPassword(actor, fileId, password)
   }
 
   /**
    * Decrypts and saves the original file (keeps uploaded extension, e.g. .pdf).
    */
-  async downloadFile(fileId: string, password: string): Promise<DownloadFileResult> {
-    const userId = this.session.requireUserId()
+  async downloadFile(actor: FileActor, fileId: string, password: string): Promise<DownloadFileResult> {
+    const { userId } = actor
     await this.acl.requireFile(fileId, 'copy', userId)
     const record = await this.requireAccessibleFile(fileId)
     await this.assertFilePassword(record.accessPasswordHash, password)
 
-    const decrypted = await this.decryptWithPassword(fileId, password)
+    const decrypted = await this.decryptWithPassword(actor, fileId, password)
 
     const originalExt = extname(record.originalFileName).replace(/^\./, '').toLowerCase()
     const baseName = safeFileName(
@@ -246,8 +248,7 @@ export class FileService {
     }
   }
 
-  async listFiles(filter: ListFilesFilter = {}): Promise<FileDto[]> {
-    const userId = this.session.requireUserId()
+  async listFiles(userId: string, filter: ListFilesFilter = {}): Promise<FileDto[]> {
 
     if (filter.folderId) {
       await this.acl.require(filter.folderId, 'view', userId)
@@ -283,8 +284,7 @@ export class FileService {
     return result
   }
 
-  async deleteFile(fileId: string): Promise<FileDto> {
-    const userId = this.session.requireUserId()
+  async deleteFile(userId: string, fileId: string): Promise<FileDto> {
     await this.acl.requireFile(fileId, 'delete', userId)
 
     const existing = await this.requireAccessibleFile(fileId)
@@ -312,8 +312,7 @@ export class FileService {
   /**
    * Moves a file into another folder within the same category (Explorer / Drive style).
    */
-  async moveFile(payload: MoveFilePayload): Promise<FileDto> {
-    const userId = this.session.requireUserId()
+  async moveFile(userId: string, payload: MoveFilePayload): Promise<FileDto> {
     const fileId = payload.fileId?.trim()
     const targetFolderId = payload.targetFolderId?.trim()
 
@@ -370,8 +369,7 @@ export class FileService {
    * Duplicates an encrypted vault file into another folder (same category).
    * Copies ciphertext + crypto metadata — no plaintext re-wrap needed.
    */
-  async copyFile(payload: CopyFilePayload): Promise<FileDto> {
-    const userId = this.session.requireUserId()
+  async copyFile(userId: string, payload: CopyFilePayload): Promise<FileDto> {
     const fileId = payload.fileId?.trim()
     const targetFolderId = payload.targetFolderId?.trim()
 
@@ -472,11 +470,11 @@ export class FileService {
   }
 
   private async decryptWithPassword(
+    actor: FileActor,
     fileId: string,
     password: string
   ): Promise<GetFileResult> {
-    const userId = this.session.requireUserId()
-    const kek = this.session.requireKek()
+    const { userId, kek } = actor
     const record = await this.requireAccessibleFile(fileId)
     await this.assertFilePassword(record.accessPasswordHash, password)
 

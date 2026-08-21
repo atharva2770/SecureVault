@@ -9,18 +9,16 @@ import type {
   PasswordFilePayload
 } from '../../shared/ipc'
 import { FileService } from '../services/FileService'
-import { VaultSession } from '../session/VaultSession'
+import { requireDesktopActor, requireDesktopUserId } from '../session/desktopActor'
 import { toIpcError } from './ipcErrors'
 
 /**
- * Registers file vault IPC handlers.
- * Services are resolved inside handlers so SQL Server is not touched at startup.
+ * Desktop IPC adapter: VaultSession → explicit actor/userId for FileService.
  */
 export function registerFilesIpc(): void {
   ipcMain.handle(IpcChannels.files.add, async (_event, payload: AddFilePayload) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().addFile(payload)
+      return await FileService.getInstance().addFile(requireDesktopActor(), payload)
     } catch (error) {
       throw toIpcError(error)
     }
@@ -28,8 +26,11 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.get, async (_event, payload: PasswordFilePayload) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().getFile(payload.fileId, payload.password)
+      return await FileService.getInstance().getFile(
+        requireDesktopActor(),
+        payload.fileId,
+        payload.password
+      )
     } catch (error) {
       throw toIpcError(error)
     }
@@ -37,8 +38,11 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.open, async (_event, payload: PasswordFilePayload) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().openFile(payload.fileId, payload.password)
+      return await FileService.getInstance().openFile(
+        requireDesktopActor(),
+        payload.fileId,
+        payload.password
+      )
     } catch (error) {
       throw toIpcError(error)
     }
@@ -46,8 +50,11 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.download, async (_event, payload: PasswordFilePayload) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().downloadFile(payload.fileId, payload.password)
+      return await FileService.getInstance().downloadFile(
+        requireDesktopActor(),
+        payload.fileId,
+        payload.password
+      )
     } catch (error) {
       throw toIpcError(error)
     }
@@ -55,13 +62,12 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.list, async (_event, filter: ListFilesFilter | string | null) => {
     try {
-      VaultSession.getInstance().touch()
-      // Backward-compatible: older callers passed folderId string | null
+      const userId = requireDesktopUserId()
       const normalized: ListFilesFilter =
         filter === null || typeof filter === 'string'
           ? { folderId: filter }
           : (filter ?? {})
-      return await FileService.getInstance().listFiles(normalized)
+      return await FileService.getInstance().listFiles(userId, normalized)
     } catch (error) {
       throw toIpcError(error)
     }
@@ -69,8 +75,7 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.delete, async (_event, fileId: string) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().deleteFile(fileId)
+      return await FileService.getInstance().deleteFile(requireDesktopUserId(), fileId)
     } catch (error) {
       throw toIpcError(error)
     }
@@ -78,8 +83,7 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.move, async (_event, payload: MoveFilePayload) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().moveFile(payload)
+      return await FileService.getInstance().moveFile(requireDesktopUserId(), payload)
     } catch (error) {
       throw toIpcError(error)
     }
@@ -87,8 +91,7 @@ export function registerFilesIpc(): void {
 
   ipcMain.handle(IpcChannels.files.copy, async (_event, payload: CopyFilePayload) => {
     try {
-      VaultSession.getInstance().touch()
-      return await FileService.getInstance().copyFile(payload)
+      return await FileService.getInstance().copyFile(requireDesktopUserId(), payload)
     } catch (error) {
       throw toIpcError(error)
     }

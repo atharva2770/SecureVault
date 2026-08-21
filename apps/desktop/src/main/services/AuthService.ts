@@ -18,6 +18,10 @@ export type AuthResult = AuthResultDto
 /**
  * Registration / login that derives a KEK into {@link VaultSession} only.
  * The KEK is never written to disk, the DB, or IPC.
+ *
+ * Unlock / lock / session are desktop adapters. Domain methods such as
+ * {@link AuthService.changePassword} take an explicit userId so a future API
+ * can call them without a process-wide session.
  */
 export class AuthService {
   private static instance: AuthService | null = null
@@ -182,8 +186,11 @@ export class AuthService {
    * Re-derives and stores a new KEK verifier after a password change.
    * The vault must already be unlocked with the current password.
    */
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    const userId = this.session.requireUserId()
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
     this.assertPassword(currentPassword)
     this.assertPassword(newPassword)
 
@@ -220,15 +227,17 @@ export class AuthService {
         }
       })
 
-      // Rotate in-memory KEK to the new derivation.
       const roles = await this.rbac.getUserRoleCodes(user.userId)
-      this.session.unlock({
-        userId: user.userId,
-        username: user.username,
-        role: user.role,
-        roles,
-        kek: nextKek
-      })
+      const current = this.session.getPublicInfo()
+      if (current?.userId === user.userId) {
+        this.session.unlock({
+          userId: user.userId,
+          username: user.username,
+          role: user.role,
+          roles,
+          kek: nextKek
+        })
+      }
       nextKek = null
 
       await this.audit.write({

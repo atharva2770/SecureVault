@@ -7,18 +7,16 @@ import type {
   AdminSetUserRolesPayload
 } from '../../shared/ipc'
 import { AdminService } from '../services/AdminService'
-import { VaultSession } from '../session/VaultSession'
+import { requireDesktopUserId } from '../session/desktopActor'
 import { toIpcError } from './ipcErrors'
 
+/**
+ * Desktop IPC adapter: VaultSession → explicit actorUserId for AdminService.
+ */
 export function registerAdminIpc(): void {
-  const touch = (): void => {
-    VaultSession.getInstance().touch()
-  }
-
   ipcMain.handle(IpcChannels.admin.listUsers, async () => {
     try {
-      touch()
-      return await AdminService.getInstance().listUsers()
+      return await AdminService.getInstance().listUsers(requireDesktopUserId())
     } catch (error) {
       throw toIpcError(error)
     }
@@ -26,8 +24,7 @@ export function registerAdminIpc(): void {
 
   ipcMain.handle(IpcChannels.admin.createUser, async (_e, payload: AdminCreateUserPayload) => {
     try {
-      touch()
-      return await AdminService.getInstance().createUser(payload)
+      return await AdminService.getInstance().createUser(requireDesktopUserId(), payload)
     } catch (error) {
       throw toIpcError(error)
     }
@@ -37,8 +34,7 @@ export function registerAdminIpc(): void {
     IpcChannels.admin.setUserRoles,
     async (_e, payload: AdminSetUserRolesPayload) => {
       try {
-        touch()
-        return await AdminService.getInstance().setUserRoles(payload)
+        return await AdminService.getInstance().setUserRoles(requireDesktopUserId(), payload)
       } catch (error) {
         throw toIpcError(error)
       }
@@ -49,8 +45,8 @@ export function registerAdminIpc(): void {
     IpcChannels.admin.setUserDisabled,
     async (_e, payload: { userId: string; isDisabled: boolean }) => {
       try {
-        touch()
         return await AdminService.getInstance().setUserDisabled(
+          requireDesktopUserId(),
           payload.userId,
           payload.isDisabled
         )
@@ -62,8 +58,7 @@ export function registerAdminIpc(): void {
 
   ipcMain.handle(IpcChannels.admin.listRoles, async () => {
     try {
-      touch()
-      return await AdminService.getInstance().listRoles()
+      return await AdminService.getInstance().listRoles(requireDesktopUserId())
     } catch (error) {
       throw toIpcError(error)
     }
@@ -71,8 +66,7 @@ export function registerAdminIpc(): void {
 
   ipcMain.handle(IpcChannels.admin.listAclFolders, async () => {
     try {
-      touch()
-      return await AdminService.getInstance().listAclFolders()
+      return await AdminService.getInstance().listAclFolders(requireDesktopUserId())
     } catch (error) {
       throw toIpcError(error)
     }
@@ -80,8 +74,7 @@ export function registerAdminIpc(): void {
 
   ipcMain.handle(IpcChannels.admin.listFolderAcls, async (_e, folderId: string) => {
     try {
-      touch()
-      return await AdminService.getInstance().listFolderAcls(folderId)
+      return await AdminService.getInstance().listFolderAcls(requireDesktopUserId(), folderId)
     } catch (error) {
       throw toIpcError(error)
     }
@@ -91,8 +84,7 @@ export function registerAdminIpc(): void {
     IpcChannels.admin.setFolderAcl,
     async (_e, payload: AdminSetFolderAclPayload) => {
       try {
-        touch()
-        return await AdminService.getInstance().setFolderAcl(payload)
+        return await AdminService.getInstance().setFolderAcl(requireDesktopUserId(), payload)
       } catch (error) {
         throw toIpcError(error)
       }
@@ -101,8 +93,10 @@ export function registerAdminIpc(): void {
 
   ipcMain.handle(IpcChannels.admin.revokeFolderAcl, async (_e, folderAclId: string) => {
     try {
-      touch()
-      return await AdminService.getInstance().revokeFolderAcl(folderAclId)
+      return await AdminService.getInstance().revokeFolderAcl(
+        requireDesktopUserId(),
+        folderAclId
+      )
     } catch (error) {
       throw toIpcError(error)
     }
@@ -110,8 +104,7 @@ export function registerAdminIpc(): void {
 
   ipcMain.handle(IpcChannels.admin.getMyAccess, async () => {
     try {
-      touch()
-      return await AdminService.getInstance().getMyAccess()
+      return await AdminService.getInstance().getMyAccess(requireDesktopUserId())
     } catch (error) {
       throw toIpcError(error)
     }

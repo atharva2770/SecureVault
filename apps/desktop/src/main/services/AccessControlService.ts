@@ -1,7 +1,4 @@
 import { DBService, type PrismaClient } from '@securevault/db'
-
-import { AuditAction, AuditService } from './AuditService'
-import { VaultSession } from '../session/VaultSession'
 import {
   EMPTY_RIGHTS,
   FULL_RIGHTS,
@@ -11,9 +8,12 @@ import {
   PrincipalType,
   RoleCode,
   intersectRights,
-  rightToFlag,
-  unionRights
+  resolveFolderRightsPure,
+  rightToFlag
 } from '@securevault/domain'
+import type { AccessGrant } from '@securevault/domain'
+
+import { AuditAction, AuditService } from './AuditService'
 
 interface CacheEntry {
   rights: FolderRights
@@ -49,22 +49,14 @@ type AclRow = {
 }
 
 /**
- * Server-side authorization for folder (and optional file) actions.
+ * Single authz engine for desktop today and the future web API.
  * Deny-by-default. Admin bypasses folder ACL. Viewer role caps at VIEW.
- *
- * Effective rights algorithm (Phase 3):
- * 1. Load user roles + permission caps
- * 2. Admin → full rights
- * 3. Walk ancestors root→leaf; apply Inherit ACLs; then exact-folder ACLs
- * 4. Exact USER grant on a folder overrides inherited USER rights for that folder
- * 5. Union with ROLE principal grants; intersect role capability cap
- * 6. Optional FilePermission row further intersects (Phase 4)
+ * Effective rights are computed by {@link resolveFolderRightsPure} — do not re-implement.
  */
 export class AccessControlService {
   private static instance: AccessControlService | null = null
 
   private readonly db = DBService.getInstance()
-  private readonly session = VaultSession.getInstance()
   private readonly audit = AuditService.getInstance()
 
   private readonly rightsCache = new Map<string, CacheEntry>()
@@ -92,7 +84,6 @@ export class AccessControlService {
   }
 
   invalidateFolder(_folderId: string): void {
-    // Folder ACL changes can affect any user — clear rights cache.
     this.rightsCache.clear()
   }
 
@@ -116,18 +107,16 @@ export class AccessControlService {
     return roles.includes(RoleCode.ADMIN)
   }
 
-  async getEffectiveRights(folderId: string, userId?: string): Promise<FolderRights> {
-    const uid = userId ?? this.session.requireUserId()
-    return this.resolveEffectiveRights(uid, folderId)
+  async getEffectiveRights(folderId: string, userId: string): Promise<FolderRights> {
+    return this.resolveEffectiveRights(userId, folderId)
   }
 
-  async require(folderId: string, right: FolderRight, userId?: string): Promise<FolderRights> {
-    const uid = userId ?? this.session.requireUserId()
-    const rights = await this.resolveEffectiveRights(uid, folderId)
+  async require(folderId: string, right: FolderRight, userId: string): Promise<FolderRights> {
+    const rights = await this.resolveEffectiveRights(userId, folderId)
     if (!rightToFlag(rights, right)) {
       await this.audit.write({
         action: AuditAction.ACL_DENY,
-        userId: uid,
+        userId,
         details: `deny:${right}:folder:${folderId}`
       })
       throw new Error('Access denied.')
@@ -135,8 +124,7 @@ export class AccessControlService {
     return rights
   }
 
-  async requireFile(fileId: string, right: FolderRight, userId?: string): Promise<FolderRights> {
-    const uid = userId ?? this.session.requireUserId()
+  async requireFile(fileId: string, right: FolderRight, userId: string): Promise<FolderRights> {
     const file = await this.prisma.file.findFirst({
       where: { fileId, isDeleted: false },
       select: { folderId: true, fileId: true }
@@ -145,11 +133,10 @@ export class AccessControlService {
       throw new Error('File not found.')
     }
 
-    let rights = await this.require(file.folderId, right, uid)
+    let rights = await this.require(file.folderId, right, userId)
 
-    // Phase 4: optional per-file ACL intersects folder rights when present
     const fileAcl = await this.prisma.filePermission.findUnique({
-      where: { fileId_userId: { fileId, userId: uid } }
+      where: { fileId_userId: { fileId, userId } }
     })
     if (fileAcl) {
       const fileRights = this.fileAccessLevelToRights(fileAcl.accessLevel)
@@ -157,7 +144,7 @@ export class AccessControlService {
       if (!rightToFlag(rights, right)) {
         await this.audit.write({
           action: AuditAction.ACL_DENY,
-          userId: uid,
+          userId,
           fileId,
           details: `deny:${right}:file:${fileId}`
         })
@@ -168,21 +155,16 @@ export class AccessControlService {
     return rights
   }
 
-  async filterViewableFolderIds(folderIds: string[], userId?: string): Promise<Set<string>> {
-    const uid = userId ?? this.session.requireUserId()
+  async filterViewableFolderIds(folderIds: string[], userId: string): Promise<Set<string>> {
     const allowed = new Set<string>()
     for (const id of folderIds) {
-      const rights = await this.resolveEffectiveRights(uid, id)
+      const rights = await this.resolveEffectiveRights(userId, id)
       if (rights.view) allowed.add(id)
     }
     return allowed
   }
 
-  /**
-   * Folders the current user can VIEW, with effective rights (My Access).
-   */
-  async getMyAccess(userId?: string): Promise<MyAccessEntry[]> {
-    const uid = userId ?? this.session.requireUserId()
+  async getMyAccess(userId: string): Promise<MyAccessEntry[]> {
     const folders = await this.prisma.folder.findMany({
       where: { isDeleted: false },
       orderBy: [{ isCategoryRoot: 'desc' }, { name: 'asc' }]
@@ -192,7 +174,7 @@ export class AccessControlService {
     const result: MyAccessEntry[] = []
 
     for (const folder of folders) {
-      const rights = await this.resolveEffectiveRights(uid, folder.folderId)
+      const rights = await this.resolveEffectiveRights(userId, folder.folderId)
       if (!rights.view) continue
 
       const parts: string[] = []
@@ -237,10 +219,7 @@ export class AccessControlService {
     }
   }
 
-  private async resolveEffectiveRights(
-    userId: string,
-    folderId: string
-  ): Promise<FolderRights> {
+  private async resolveEffectiveRights(userId: string, folderId: string): Promise<FolderRights> {
     const cacheKey = `${userId}:${folderId}`
     const cached = this.rightsCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) {
@@ -248,8 +227,9 @@ export class AccessControlService {
     }
 
     const identity = await this.loadIdentity(userId)
+    const isAdmin = identity.roleCodes.includes(RoleCode.ADMIN)
 
-    if (identity.roleCodes.includes(RoleCode.ADMIN)) {
+    if (isAdmin) {
       this.rightsCache.set(cacheKey, {
         rights: FULL_RIGHTS,
         expiresAt: Date.now() + CACHE_TTL_MS
@@ -297,61 +277,27 @@ export class AccessControlService {
       }
     })
 
-    let inherited = EMPTY_RIGHTS
-    let exactUser = EMPTY_RIGHTS
-    let hasExactUser = false
-    let exactRole = EMPTY_RIGHTS
+    const grants: AccessGrant[] = rows.map((row) => ({
+      principalType: row.principalType === PrincipalType.ROLE ? 'ROLE' : 'USER',
+      principalId: row.principalId,
+      rights: {
+        view: row.canView,
+        edit: row.canEdit,
+        copy: row.canCopy,
+        delete: row.canDelete
+      },
+      inherit: row.inherit,
+      folderId: row.folderId
+    }))
 
-    for (const node of chain) {
-      const isExact = node.folderId === folderId
-      const nodeRows = rows.filter((r) => r.folderId === node.folderId)
-
-      for (const row of nodeRows) {
-        const grant: FolderRights = {
-          view: row.canView,
-          edit: row.canEdit,
-          copy: row.canCopy,
-          delete: row.canDelete
-        }
-
-        if (isExact) {
-          if (row.principalType === PrincipalType.USER) {
-            exactUser = unionRights(exactUser, grant)
-            hasExactUser = true
-          } else {
-            exactRole = unionRights(exactRole, grant)
-          }
-        } else if (row.inherit) {
-          inherited = unionRights(inherited, grant)
-        }
-      }
-    }
-
-    // Exact USER grant on this folder overrides inherited rights; then union ROLE grants.
-    let aclRights = hasExactUser ? exactUser : inherited
-    aclRights = unionRights(aclRights, exactRole)
-    if (hasExactUser) {
-      // Still allow inherited ROLE grants when user has an exact USER row
-      // (role packs + personal override). Rebuild inherited role-only:
-      let inheritedRoleOnly = EMPTY_RIGHTS
-      for (const node of chain) {
-        if (node.folderId === folderId) continue
-        for (const row of rows.filter((r) => r.folderId === node.folderId)) {
-          if (!row.inherit || row.principalType !== PrincipalType.ROLE) continue
-          inheritedRoleOnly = unionRights(inheritedRoleOnly, {
-            view: row.canView,
-            edit: row.canEdit,
-            copy: row.canCopy,
-            delete: row.canDelete
-          })
-        }
-      }
-      aclRights = unionRights(exactUser, unionRights(inheritedRoleOnly, exactRole))
-    }
-
-    const roleCap = this.roleCapabilityCap(identity.permissionCodes)
-    let effective = intersectRights(aclRights, roleCap)
-    if (!effective.view) effective = EMPTY_RIGHTS
+    const effective = resolveFolderRightsPure({
+      isAdmin,
+      roleCapability: this.roleCapabilityCap(identity.permissionCodes),
+      userId,
+      roleIds: identity.roleIds,
+      chainFolderIds: chainIds,
+      grants
+    })
 
     this.rightsCache.set(cacheKey, {
       rights: effective,

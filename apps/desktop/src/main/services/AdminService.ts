@@ -10,7 +10,6 @@ import type {
   RoleDto
 } from '../../shared/ipc'
 import { PermissionCode, RoleCode } from '@securevault/domain'
-import { VaultSession } from '../session/VaultSession'
 import { AccessControlService } from './AccessControlService'
 import { AuditAction, AuditService } from './AuditService'
 import type { Argon2Params } from './CryptoService'
@@ -30,7 +29,6 @@ export class AdminService {
   private static instance: AdminService | null = null
 
   private readonly db = DBService.getInstance()
-  private readonly session = VaultSession.getInstance()
   private readonly crypto = CryptoService.getInstance()
   private readonly acl = AccessControlService.getInstance()
   private readonly rbac = RbacService.getInstance()
@@ -45,17 +43,16 @@ export class AdminService {
     return AdminService.instance
   }
 
-  private async requireAdminOrManager(forAclOnly = false): Promise<string> {
-    const userId = this.session.requireUserId()
-    if (await this.acl.isAdmin(userId)) return userId
-    if (forAclOnly && (await this.acl.hasGlobalPermission(userId, PermissionCode.ADMIN_ACL))) {
-      return userId
+  private async requireAdminOrManager(actorUserId: string, forAclOnly = false): Promise<string> {
+    if (await this.acl.isAdmin(actorUserId)) return actorUserId
+    if (forAclOnly && (await this.acl.hasGlobalPermission(actorUserId, PermissionCode.ADMIN_ACL))) {
+      return actorUserId
     }
     throw new Error('Access denied. Admin privileges required.')
   }
 
-  async listRoles(): Promise<RoleDto[]> {
-    await this.requireAdminOrManager(true)
+  async listRoles(actorUserId: string): Promise<RoleDto[]> {
+    await this.requireAdminOrManager(actorUserId, true)
     const roles = await this.db.prisma.role.findMany({
       orderBy: { name: 'asc' },
       include: {
@@ -72,8 +69,8 @@ export class AdminService {
     }))
   }
 
-  async listUsers(): Promise<AdminUserDto[]> {
-    await this.requireAdminOrManager(false)
+  async listUsers(actorUserId: string): Promise<AdminUserDto[]> {
+    await this.requireAdminOrManager(actorUserId, false)
     const users = await this.db.prisma.user.findMany({
       orderBy: { username: 'asc' },
       include: {
@@ -94,8 +91,8 @@ export class AdminService {
   /**
    * Creates a vault user without unlocking their session (admin provision).
    */
-  async createUser(payload: AdminCreateUserPayload): Promise<AdminUserDto> {
-    const actorId = await this.requireAdminOrManager(false)
+  async createUser(actorUserId: string, payload: AdminCreateUserPayload): Promise<AdminUserDto> {
+    const actorId = await this.requireAdminOrManager(actorUserId, false)
     const username = payload.username?.trim()
     const password = payload.password
     const roleCode = (payload.roleCode || RoleCode.MEMBER).toUpperCase()
@@ -161,8 +158,8 @@ export class AdminService {
     }
   }
 
-  async setUserRoles(payload: AdminSetUserRolesPayload): Promise<AdminUserDto> {
-    const actorId = await this.requireAdminOrManager(false)
+  async setUserRoles(actorUserId: string, payload: AdminSetUserRolesPayload): Promise<AdminUserDto> {
+    const actorId = await this.requireAdminOrManager(actorUserId, false)
     const targetId = payload.userId?.trim()
     if (!targetId) throw new Error('userId is required.')
 
@@ -191,8 +188,12 @@ export class AdminService {
     return this.getUserDto(targetId)
   }
 
-  async setUserDisabled(userId: string, isDisabled: boolean): Promise<AdminUserDto> {
-    const actorId = await this.requireAdminOrManager(false)
+  async setUserDisabled(
+    actorUserId: string,
+    userId: string,
+    isDisabled: boolean
+  ): Promise<AdminUserDto> {
+    const actorId = await this.requireAdminOrManager(actorUserId, false)
     if (userId === actorId && isDisabled) {
       throw new Error('You cannot disable your own account.')
     }
@@ -216,8 +217,8 @@ export class AdminService {
   /**
    * Lists category-root folders (for ACL matrix) with optional all folders.
    */
-  async listAclFolders(): Promise<FolderDto[]> {
-    await this.requireAdminOrManager(true)
+  async listAclFolders(actorUserId: string): Promise<FolderDto[]> {
+    await this.requireAdminOrManager(actorUserId, true)
     const folders = await this.db.prisma.folder.findMany({
       where: { isDeleted: false },
       orderBy: [{ isCategoryRoot: 'desc' }, { name: 'asc' }]
@@ -235,8 +236,8 @@ export class AdminService {
     }))
   }
 
-  async listFolderAcls(folderId: string): Promise<FolderAclDto[]> {
-    await this.requireAdminOrManager(true)
+  async listFolderAcls(actorUserId: string, folderId: string): Promise<FolderAclDto[]> {
+    await this.requireAdminOrManager(actorUserId, true)
     const rows = await this.db.prisma.folderAcl.findMany({
       where: { folderId },
       orderBy: { grantedAt: 'desc' }
@@ -285,8 +286,8 @@ export class AdminService {
     }))
   }
 
-  async setFolderAcl(payload: AdminSetFolderAclPayload): Promise<FolderAclDto[]> {
-    const actorId = await this.requireAdminOrManager(true)
+  async setFolderAcl(actorUserId: string, payload: AdminSetFolderAclPayload): Promise<FolderAclDto[]> {
+    const actorId = await this.requireAdminOrManager(actorUserId, true)
     const folderId = payload.folderId?.trim()
     if (!folderId) throw new Error('folderId is required.')
 
@@ -368,11 +369,11 @@ export class AdminService {
       details: `folderAcl:${folderId}:${principalType}:${principalId}:V${canView ? 1 : 0}E${canEdit ? 1 : 0}C${canCopy ? 1 : 0}D${canDelete ? 1 : 0}`
     })
 
-    return this.listFolderAcls(folderId)
+    return this.listFolderAcls(actorId, folderId)
   }
 
-  async revokeFolderAcl(folderAclId: string): Promise<FolderAclDto[]> {
-    const actorId = await this.requireAdminOrManager(true)
+  async revokeFolderAcl(actorUserId: string, folderAclId: string): Promise<FolderAclDto[]> {
+    const actorId = await this.requireAdminOrManager(actorUserId, true)
     const row = await this.db.prisma.folderAcl.findUnique({ where: { folderAclId } })
     if (!row) throw new Error('ACL entry not found.')
 
@@ -391,13 +392,11 @@ export class AdminService {
       details: `revokeAcl:${folderAclId}`
     })
 
-    return this.listFolderAcls(row.folderId)
+    return this.listFolderAcls(actorId, row.folderId)
   }
 
-  /** Any unlocked user — folders they can see + rights. */
-  async getMyAccess() {
-    this.session.requireUserId()
-    return this.acl.getMyAccess()
+  async getMyAccess(actorUserId: string) {
+    return this.acl.getMyAccess(actorUserId)
   }
 
   private async getUserDto(userId: string): Promise<AdminUserDto> {

@@ -243,7 +243,7 @@ Core tables include:
 ## Roadmap
 
 - **Phase 0 (done)** — npm workspace; Prisma + domain packages; desktop still uses IPC
-- **Phase 1** — extract a single authz engine; services take `userId` instead of a process-wide vault session
+- **Phase 1 (done)** — single authz engine (`resolveFolderRightsPure`); services take `userId` / actor; desktop IPC still reads `VaultSession`
 - **Phase 2** — web API (auth, folders, files metadata, admin ACL) on the same SQL Server database
 - **Phase 3** — encrypted blobs + KMS wrapping; streaming upload/download
 - **Phase 4** — web UI (Unlock, VaultBrowser, Admin) over HTTP

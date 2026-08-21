@@ -8,6 +8,7 @@ import type {
   RegisterPayload
 } from '../../shared/ipc'
 import { VaultSession } from '../session/VaultSession'
+import { requireDesktopUserId } from '../session/desktopActor'
 import { AuthService } from '../services/AuthService'
 import { toIpcError } from './ipcErrors'
 
@@ -88,6 +89,7 @@ export function registerAuthIpc(): void {
     async (_event, payload: ChangePasswordPayload) => {
       try {
         await AuthService.getInstance().changePassword(
+          requireDesktopUserId(),
           payload.currentPassword,
           payload.newPassword
         )

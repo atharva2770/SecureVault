@@ -1,18 +1,17 @@
 import type { FileCategoryDto, FolderDto, FolderRights } from '@securevault/domain'
 import { EMPTY_RIGHTS } from '@securevault/domain'
-import { VaultSession } from '../session/VaultSession'
 import { AccessControlService } from './AccessControlService'
 import { DBService } from '@securevault/db'
 
 /**
  * Category catalog + shared sidebar folder trees.
  * Visibility is ACL-driven (AccessControlService), not folder UserId.
+ * Caller (desktop IPC or future API) must pass the acting userId.
  */
 export class FolderService {
   private static instance: FolderService | null = null
 
   private readonly db = DBService.getInstance()
-  private readonly session = VaultSession.getInstance()
   private readonly acl = AccessControlService.getInstance()
 
   private constructor() {}
@@ -24,21 +23,22 @@ export class FolderService {
     return FolderService.instance
   }
 
-  async ensureSidebarStructure(): Promise<{
+  async ensureSidebarStructure(userId: string): Promise<{
     categories: FileCategoryDto[]
     folders: FolderDto[]
   }> {
-    const userId = this.session.requireUserId()
     await this.ensureSharedCategoryRoots(userId)
     const [categories, folders] = await Promise.all([
-      this.listCategories(),
-      this.listFolders()
+      this.listCategories(userId),
+      this.listFolders(userId)
     ])
     return { categories, folders }
   }
 
-  async listCategories(): Promise<FileCategoryDto[]> {
-    this.session.requireUserId()
+  async listCategories(userId: string): Promise<FileCategoryDto[]> {
+    if (!userId) {
+      throw new Error('Vault is locked. Sign in to unlock.')
+    }
 
     const rows = await this.db.prisma.fileCategory.findMany({
       orderBy: { sortOrder: 'asc' }
@@ -53,8 +53,7 @@ export class FolderService {
     }))
   }
 
-  async createCategory(name: string, code?: string): Promise<FileCategoryDto> {
-    const userId = this.session.requireUserId()
+  async createCategory(userId: string, name: string, code?: string): Promise<FileCategoryDto> {
     const isAdmin = await this.acl.isAdmin(userId)
     if (!isAdmin) {
       throw new Error('Access denied. Only admins can create categories.')
@@ -131,8 +130,7 @@ export class FolderService {
   /**
    * Lists shared folders the current user can VIEW (with rights on each DTO).
    */
-  async listFolders(): Promise<FolderDto[]> {
-    const userId = this.session.requireUserId()
+  async listFolders(userId: string): Promise<FolderDto[]> {
     await this.ensureSharedCategoryRoots(userId)
 
     const folders = await this.db.prisma.folder.findMany({
@@ -149,8 +147,7 @@ export class FolderService {
     return result
   }
 
-  async createSubfolder(name: string, parentFolderId: string): Promise<FolderDto> {
-    const userId = this.session.requireUserId()
+  async createSubfolder(userId: string, name: string, parentFolderId: string): Promise<FolderDto> {
     await this.acl.require(parentFolderId, 'edit', userId)
 
     const trimmed = name.trim()
@@ -193,8 +190,7 @@ export class FolderService {
     return toFolderDto(folder, rights)
   }
 
-  async deleteFolder(folderId: string): Promise<FolderDto> {
-    const userId = this.session.requireUserId()
+  async deleteFolder(userId: string, folderId: string): Promise<FolderDto> {
     await this.acl.require(folderId, 'delete', userId)
 
     const folder = await this.db.prisma.folder.findFirst({
@@ -229,8 +225,7 @@ export class FolderService {
     return toFolderDto(record, EMPTY_RIGHTS)
   }
 
-  async getCategoryRootFolderId(categoryId: string): Promise<string> {
-    const userId = this.session.requireUserId()
+  async getCategoryRootFolderId(userId: string, categoryId: string): Promise<string> {
     await this.ensureSharedCategoryRoots(userId)
 
     const root = await this.db.prisma.folder.findFirst({
