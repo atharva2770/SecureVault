@@ -1,8 +1,7 @@
-import type { PrismaClient } from '@prisma/client'
+import { DBService, type PrismaClient } from '@securevault/db'
+import { RoleCode } from '@securevault/domain'
 
 import { AccessControlService } from './AccessControlService'
-import { DBService } from './DBService'
-import { RoleCode } from '../../shared/rbac'
 
 /**
  * Role assignment helpers used by AuthService and AdminService.

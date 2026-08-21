@@ -1,6 +1,6 @@
 import { hostname } from 'node:os'
 
-import { DBService } from './DBService'
+import { DBService } from '@securevault/db'
 
 /**
  * Canonical audit actions written to the single `AuditLogs` table.

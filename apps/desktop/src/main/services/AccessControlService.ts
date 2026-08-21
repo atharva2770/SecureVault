@@ -1,7 +1,6 @@
-import type { PrismaClient } from '@prisma/client'
+import { DBService, type PrismaClient } from '@securevault/db'
 
 import { AuditAction, AuditService } from './AuditService'
-import { DBService } from './DBService'
 import { VaultSession } from '../session/VaultSession'
 import {
   EMPTY_RIGHTS,
@@ -14,7 +13,7 @@ import {
   intersectRights,
   rightToFlag,
   unionRights
-} from '../../shared/rbac'
+} from '@securevault/domain'
 
 interface CacheEntry {
   rights: FolderRights

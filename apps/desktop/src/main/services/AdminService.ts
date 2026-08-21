@@ -9,13 +9,13 @@ import type {
   FolderDto,
   RoleDto
 } from '../../shared/ipc'
-import { PermissionCode, RoleCode } from '../../shared/rbac'
+import { PermissionCode, RoleCode } from '@securevault/domain'
 import { VaultSession } from '../session/VaultSession'
 import { AccessControlService } from './AccessControlService'
 import { AuditAction, AuditService } from './AuditService'
 import type { Argon2Params } from './CryptoService'
 import { CryptoService } from './CryptoService'
-import { DBService } from './DBService'
+import { DBService } from '@securevault/db'
 import { RbacService } from './RbacService'
 import { secureZero, sha256Hex } from '../utils/secure'
 

@@ -1,0 +1,20 @@
+{
+  "extends": "../../node_modules/@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "../../packages/domain/src/**/*",
+    "../../packages/db/src/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "types": ["electron-vite/node"],
+    "baseUrl": ".",
+    "paths": {
+      "@securevault/domain": ["../../packages/domain/src/index.ts"],
+      "@securevault/db": ["../../packages/db/src/index.ts"]
+    }
+  }
+}

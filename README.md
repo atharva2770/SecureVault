@@ -1,8 +1,8 @@
 # SecureVault
 
-SecureVault is a cross-platform desktop application for **encrypted document storage and team access control**. Files are encrypted at rest with **AES-256-GCM**, metadata and permissions live in **Microsoft SQL Server**, and sensitive cryptographic operations run only in the Electron **main process** — never in the browser UI.
+SecureVault is an **encrypted document vault** for teams. Files are encrypted at rest with **AES-256-GCM**, metadata and permissions live in **Microsoft SQL Server**, and cryptographic operations never run in the UI.
 
-Built with **Electron**, **React**, **TypeScript**, and **Prisma**.
+This repository is an **npm workspace**. Phase 0 keeps the **desktop Electron app** fully working over IPC while sharing Prisma, RBAC, access policy, and DTOs as packages for the upcoming web API and web UI.
 
 ---
 
@@ -24,10 +24,12 @@ Built with **Electron**, **React**, **TypeScript**, and **Prisma**.
 
 | Layer | Technology |
 | --- | --- |
-| Desktop shell | Electron + electron-vite |
+| Workspace | npm workspaces (`apps/*`, `packages/*`) |
+| Desktop shell | Electron + electron-vite (`apps/desktop`) |
+| Shared domain | `@securevault/domain` — DTOs, RBAC, access-policy |
+| Database | `@securevault/db` — Prisma + SQL Server |
 | UI | React 19, TypeScript, Tailwind CSS v4, TanStack React Query |
-| Backend (main process) | Node.js services (Auth, Crypto, Files, Folders, RBAC, Audit) |
-| Database | Microsoft SQL Server via Prisma ORM |
+| Desktop backend | Electron main process (Auth, Crypto, Files, Folders, RBAC, Audit) |
 | Cryptography | Argon2id, AES-256-GCM, SHA-256 checksums |
 | Packaging | electron-builder (Windows, macOS, Linux) |
 
@@ -37,16 +39,17 @@ Built with **Electron**, **React**, **TypeScript**, and **Prisma**.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                     Electron App                         │
+│                 apps/desktop (Electron)                  │
 │  ┌──────────────┐   IPC (preload)   ┌─────────────────┐ │
 │  │   Renderer   │ ◄──────────────► │  Main Process    │ │
 │  │  React UI    │                   │  Services + Crypto│ │
 │  └──────────────┘                   └────────┬─────────┘ │
 └─────────────────────────────────────────────┼───────────┘
                                               │
-                              ┌───────────────┴───────────────┐
-                              ▼                               ▼
-                     SQL Server (metadata)          Encrypted blobs (local disk)
+                    ┌─────────────────────────┼──────────────┐
+                    ▼                         ▼              ▼
+           @securevault/domain        @securevault/db    Encrypted blobs
+           (RBAC, DTOs, policy)       (Prisma/SQL Server)
 ```
 
 **Security rules**
@@ -118,22 +121,22 @@ CREATE DATABASE SecureVault;
 
 ### 4. Run migrations
 
-Apply Prisma migrations to create all tables, seed roles, and default file categories:
+Apply Prisma migrations (from the repo root) to create all tables, seed roles, and default file categories:
 
 ```bash
-npx prisma migrate deploy
+npm run db:deploy
 ```
 
 For development, you can also use:
 
 ```bash
-npx prisma migrate dev
+npm run db:migrate
 ```
 
-Generate the Prisma client after schema changes:
+Generate the Prisma client after schema changes (`npm install` already does this):
 
 ```bash
-npx prisma generate
+npm run db:generate
 ```
 
 ### 5. Start development
@@ -150,15 +153,19 @@ The app opens with a frameless window. The **first registered user** automatical
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start Electron in development mode with hot reload |
-| `npm run build` | Typecheck and build for production |
-| `npm run start` | Preview the production build locally |
+| `npm run dev` | Start the desktop app (Electron) with hot reload |
+| `npm run build` | Typecheck and build the desktop app |
+| `npm run start` | Preview the production desktop build |
 | `npm run build:win` | Build Windows installer (NSIS) |
 | `npm run build:mac` | Build macOS DMG |
 | `npm run build:linux` | Build Linux AppImage / deb |
-| `npm run typecheck` | Run TypeScript checks (main + renderer) |
-| `npm run lint` | Run ESLint |
-| `npm run format` | Format code with Prettier |
+| `npm run typecheck` | Typecheck all workspaces |
+| `npm run lint` | Lint the desktop app |
+| `npm run format` | Format the repo with Prettier |
+| `npm run db:generate` | Generate Prisma client |
+| `npm run db:migrate` | Create/apply a development migration |
+| `npm run db:deploy` | Apply existing migrations |
+| `npm run db:studio` | Open Prisma Studio |
 
 ---
 
@@ -166,21 +173,18 @@ The app opens with a frameless window. The **first registered user** automatical
 
 ```
 securevault/
-├── prisma/
-│   ├── schema.prisma          # Database models
-│   └── migrations/            # SQL Server migration history
-├── src/
-│   ├── main/                  # Electron main process
-│   │   ├── ipc/               # IPC handlers (auth, files, folders, admin)
-│   │   ├── services/          # Business logic and crypto
-│   │   └── session/           # In-memory vault session (KEK)
-│   ├── preload/               # Secure contextBridge API (window.api)
-│   ├── renderer/              # React UI
-│   │   └── src/components/    # VaultBrowser, AdminPanel, modals, etc.
-│   └── shared/                # DTOs, IPC channels, RBAC constants
-├── resources/                 # App icons and static assets
-├── electron-builder.yml       # Installer / packaging config
-└── electron.vite.config.ts    # Vite build config
+├── apps/
+│   └── desktop/                 # Electron desktop client (IPC, unchanged UX)
+│       ├── src/main/            # Auth, crypto, files, folders, RBAC, audit
+│       ├── src/preload/         # Secure contextBridge (window.api)
+│       ├── src/renderer/        # React UI
+│       └── src/shared/          # Electron IPC channel names
+├── packages/
+│   ├── domain/                  # DTOs, RBAC, access-policy (desktop + future web)
+│   └── db/                      # Prisma schema, migrations, DBService
+│       └── prisma/
+├── .env.example                 # SQL Server connection template
+└── package.json                 # Workspace root
 ```
 
 ---
@@ -238,10 +242,12 @@ Core tables include:
 
 ## Roadmap
 
-- **Web application** — shared API, browser client, blob storage + KMS envelope encryption (see architecture notes in repo docs)
-- Resumable large-file uploads
-- File versioning UI
-- Tag-based search and filters
+- **Phase 0 (done)** — npm workspace; Prisma + domain packages; desktop still uses IPC
+- **Phase 1** — extract a single authz engine; services take `userId` instead of a process-wide vault session
+- **Phase 2** — web API (auth, folders, files metadata, admin ACL) on the same SQL Server database
+- **Phase 3** — encrypted blobs + KMS wrapping; streaming upload/download
+- **Phase 4** — web UI (Unlock, VaultBrowser, Admin) over HTTP
+- **Phase 5** — optional: desktop talks to the same API
 
 ---
 
@@ -262,7 +268,8 @@ Core tables include:
 1. Fork the repository and create a feature branch.
 2. Run `npm run typecheck` and `npm run lint` before opening a pull request.
 3. Do not commit `.env`, build output (`out/`, `release/`), or `node_modules/`.
-4. Keep security-sensitive logic in `src/main/` — not in the renderer.
+4. Keep security-sensitive logic in `apps/desktop/src/main/` and future `apps/api` — never in a renderer or browser UI.
+5. Put shared contracts in `packages/domain` and schema/migrations only in `packages/db`.
 
 ---
 

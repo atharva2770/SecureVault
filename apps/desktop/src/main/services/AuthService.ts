@@ -1,12 +1,12 @@
 import type { Argon2Params } from './CryptoService'
 import { AuditAction, AuditService } from './AuditService'
 import { CryptoService } from './CryptoService'
-import { DBService } from './DBService'
+import { DBService } from '@securevault/db'
 import { RbacService } from './RbacService'
 import { VaultSession } from '../session/VaultSession'
 import { safeEqualHex, secureZero, sha256Hex } from '../utils/secure'
 import type { AuthResultDto, AuthSessionDto, AuthUserDto } from '../../shared/ipc'
-import { RoleCode } from '../../shared/rbac'
+import { RoleCode } from '@securevault/domain'
 
 /** Persisted alongside Argon2 params — verifies password without storing the KEK. */
 interface StoredAuthParams extends Argon2Params {

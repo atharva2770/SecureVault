@@ -1,55 +1,9 @@
 /**
- * Shared IPC channel names and DTOs.
- * Keep secrets (KEK/DEK) out of these payloads — never send key material to the renderer.
+ * Transport-agnostic DTOs shared by desktop IPC and the future HTTP API.
+ * Keep secrets (KEK/DEK) out of these payloads — never send key material to a client.
  */
 
-export const IpcChannels = {
-  auth: {
-    register: 'auth:register',
-    login: 'auth:login',
-    lock: 'auth:lock',
-    session: 'auth:session',
-    touch: 'auth:touch',
-    changePassword: 'auth:changePassword'
-  },
-  files: {
-    add: 'files:add',
-    get: 'files:get',
-    list: 'files:list',
-    delete: 'files:delete',
-    open: 'files:open',
-    download: 'files:download',
-    move: 'files:move',
-    copy: 'files:copy'
-  },
-  folders: {
-    list: 'folders:list',
-    create: 'folders:create',
-    delete: 'folders:delete'
-  },
-  categories: {
-    list: 'categories:list',
-    ensure: 'categories:ensure',
-    create: 'categories:create'
-  },
-  admin: {
-    listUsers: 'admin:listUsers',
-    createUser: 'admin:createUser',
-    setUserRoles: 'admin:setUserRoles',
-    setUserDisabled: 'admin:setUserDisabled',
-    listRoles: 'admin:listRoles',
-    listAclFolders: 'admin:listAclFolders',
-    listFolderAcls: 'admin:listFolderAcls',
-    setFolderAcl: 'admin:setFolderAcl',
-    revokeFolderAcl: 'admin:revokeFolderAcl',
-    getMyAccess: 'admin:getMyAccess'
-  },
-  events: {
-    vaultLocked: 'vault:locked'
-  }
-} as const
-
-/** Safe user profile returned to the renderer (no salts/keys). */
+/** Safe user profile returned to any client (no salts/keys). */
 export interface AuthUserDto {
   userId: string
   username: string
@@ -118,7 +72,7 @@ export interface FolderDto {
   name: string
   isCategoryRoot: boolean
   createdAt: string
-  /** Effective ACL rights for the current user (Phase 1 RBAC). */
+  /** Effective ACL rights for the current user. */
   rights: {
     view: boolean
     edit: boolean
@@ -181,7 +135,7 @@ export interface GetFileResult {
   originalFileName: string
   mimeType: string | null
   checksum: string
-  /** Temporary plaintext path in OS temp — delete after use. */
+  /** Temporary plaintext path in OS temp — delete after use (desktop). */
   tempPath: string
 }
 

@@ -1,38 +1,10 @@
-import 'dotenv/config'
 import { PrismaMssql } from '@prisma/adapter-mssql'
 import { PrismaClient } from '@prisma/client'
 
-/**
- * Resolves the active SQL Server connection string from environment variables.
- *
- * - When `USE_TRUSTED_CONNECTION=true`, uses `DATABASE_URL_TRUSTED`
- *   (Windows Authentication / trustedConnection).
- * - Otherwise uses the standard `DATABASE_URL` (SQL auth).
- *
- * @returns A Prisma-compatible SQL Server connection URL.
- * @throws If the selected environment variable is missing or empty.
- */
-export function resolveDatabaseUrl(): string {
-  const useTrusted =
-    process.env.USE_TRUSTED_CONNECTION === 'true' ||
-    process.env.USE_TRUSTED_CONNECTION === '1'
-
-  const url = useTrusted
-    ? process.env.DATABASE_URL_TRUSTED
-    : process.env.DATABASE_URL
-
-  if (!url || url.trim().length === 0) {
-    const key = useTrusted ? 'DATABASE_URL_TRUSTED' : 'DATABASE_URL'
-    throw new Error(
-      `Missing ${key}. Set USE_TRUSTED_CONNECTION and the corresponding connection string in .env.`
-    )
-  }
-
-  return url
-}
+import { resolveDatabaseUrl, usesTrustedConnection } from './env'
 
 /**
- * Singleton Prisma database service for the Electron main process.
+ * Singleton Prisma database service for desktop main process and the future API.
  * Uses the Prisma MSSQL driver adapter (required by Prisma ORM v7).
  *
  * Client construction is lazy so app startup / session checks never block on SQL Server.
@@ -69,10 +41,7 @@ export class DBService {
    * Whether the active connection uses Windows trusted authentication.
    */
   get usesTrustedConnection(): boolean {
-    return (
-      process.env.USE_TRUSTED_CONNECTION === 'true' ||
-      process.env.USE_TRUSTED_CONNECTION === '1'
-    )
+    return usesTrustedConnection()
   }
 
   /**

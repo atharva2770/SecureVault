@@ -1,5 +1,6 @@
 /**
  * RBAC / ACL constants — keep stable; seeded in SQL with fixed UUIDs.
+ * Shared by the desktop main process and the future web API.
  */
 export const PermissionCode = {
   VIEW: 'VIEW',

@@ -1,9 +1,8 @@
-import type { FileCategoryDto, FolderDto } from '../../shared/ipc'
-import type { FolderRights } from '../../shared/rbac'
-import { EMPTY_RIGHTS } from '../../shared/rbac'
+import type { FileCategoryDto, FolderDto, FolderRights } from '@securevault/domain'
+import { EMPTY_RIGHTS } from '@securevault/domain'
 import { VaultSession } from '../session/VaultSession'
 import { AccessControlService } from './AccessControlService'
-import { DBService } from './DBService'
+import { DBService } from '@securevault/db'
 
 /**
  * Category catalog + shared sidebar folder trees.

@@ -17,7 +17,7 @@ win:
   # certificateFile: ./cert.pfx
   certificatePassword: ${env.WIN_CERT_PASSWORD}
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: securevault-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
@@ -31,7 +31,7 @@ mac:
   hardenedRuntime: true
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: securevault-${version}.${ext}
 linux:
   target:
     - AppImage
@@ -39,7 +39,7 @@ linux:
   maintainer: yourcompany
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: securevault-${version}.${ext}
 npmRebuild: false
 publish:
   provider: github

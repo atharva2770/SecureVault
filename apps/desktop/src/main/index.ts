@@ -2,9 +2,12 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { DBService, loadWorkspaceEnv } from '@securevault/db'
+
 import { registerAllIpc } from './ipc'
 import { VaultSession } from './session/VaultSession'
-import { DBService } from './services/DBService'
+
+loadWorkspaceEnv()
 
 function registerWindowHandlers(): void {
   ipcMain.on('window:minimize', (event) => {

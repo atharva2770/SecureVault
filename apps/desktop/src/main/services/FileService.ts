@@ -18,7 +18,7 @@ import { secureZero } from '../utils/secure'
 import { AccessControlService } from './AccessControlService'
 import { AuditAction, AuditService } from './AuditService'
 import { CryptoService } from './CryptoService'
-import { DBService } from './DBService'
+import { DBService } from '@securevault/db'
 import { FolderService } from './FolderService'
 
 const MIME_BY_EXT: Record<string, string> = {

@@ -5,6 +5,10 @@ node_modules/
 out/
 dist/
 release/
+apps/*/out/
+apps/*/dist/
+apps/*/release/
+packages/*/dist/
 build/icon.ico
 build/icon.icns
 build/icon.png
@@ -70,7 +74,7 @@ skills-lock.json
 securevault-updater/
 
 # Prisma generated output (client lives under node_modules; keep migrations tracked)
-/src/generated/prisma
+**/generated/prisma
 
 # Local encrypted vault blobs during development (if stored in-repo for testing)
 /vault-data/

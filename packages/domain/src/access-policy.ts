@@ -1,7 +1,7 @@
 /**
- * Shared access-policy documentation + pure helpers for Electron main today
- * and a future web API (Phase 4 parity). Keep enforcement in AccessControlService;
- * do not re-implement in the renderer.
+ * Pure access-policy helpers for Electron main today and the future web API.
+ * Keep enforcement in AccessControlService (desktop) / API middleware (web);
+ * do not re-implement in any renderer or browser UI.
  *
  * Effective rights (summary):
  * - Deny by default
@@ -58,10 +58,8 @@ export function resolveFolderRightsPure(input: {
     const nodeGrants = input.grants.filter((g) => g.folderId === folderId)
 
     for (const g of nodeGrants) {
-      const matchesUser =
-        g.principalType === 'USER' && g.principalId === input.userId
-      const matchesRole =
-        g.principalType === 'ROLE' && input.roleIds.includes(g.principalId)
+      const matchesUser = g.principalType === 'USER' && g.principalId === input.userId
+      const matchesRole = g.principalType === 'ROLE' && input.roleIds.includes(g.principalId)
       if (!matchesUser && !matchesRole) continue
 
       if (isExact) {
