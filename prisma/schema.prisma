@@ -1,0 +1,268 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+model User {
+  userId                String    @id @default(uuid()) @map("UserId") @db.UniqueIdentifier
+  username              String    @unique @map("Username") @db.NVarChar(100)
+  passwordSalt          Bytes     @map("PasswordSalt") @db.VarBinary(64)
+  argon2Params          String    @map("Argon2Params") @db.NVarChar(200)
+  /// Legacy display field — authoritative roles live in UserRoles.
+  role                  String    @default("member") @map("Role") @db.NVarChar(50)
+  recoveryKeyWrappedKEK Bytes?    @map("RecoveryKeyWrappedKEK") @db.VarBinary(256)
+  isDisabled            Boolean   @default(false) @map("IsDisabled")
+  createdAt             DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  lastLoginAt           DateTime? @map("LastLoginAt") @db.DateTime2
+
+  folders     Folder[]
+  files       File[]
+  permissions FilePermission[]
+  tags        Tag[]
+  devices     Device[]
+  userRoles   UserRole[]
+  folderAcls  FolderAcl[] @relation("FolderAclGrantedBy")
+
+  @@map("Users")
+}
+
+/// Fixed + extensible document categories shown as dynamic sidebar roots.
+model FileCategory {
+  categoryId String   @id @default(uuid()) @map("CategoryId") @db.UniqueIdentifier
+  code       String   @unique @map("Code") @db.NVarChar(50)
+  name       String   @map("Name") @db.NVarChar(100)
+  sortOrder  Int      @default(0) @map("SortOrder")
+  isSystem   Boolean  @default(true) @map("IsSystem")
+  createdAt  DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+
+  folders Folder[]
+  files   File[]
+
+  @@map("FileCategories")
+}
+
+model Folder {
+  folderId       String   @id @default(uuid()) @map("FolderId") @db.UniqueIdentifier
+  /// Creator / seed owner — not used for access control (ACLs are).
+  userId         String   @map("UserId") @db.UniqueIdentifier
+  categoryId     String?  @map("CategoryId") @db.UniqueIdentifier
+  parentFolderId String?  @map("ParentFolderId") @db.UniqueIdentifier
+  name           String   @map("Name") @db.NVarChar(255)
+  /// True for auto-created category root folders (not user-deletable).
+  isCategoryRoot Boolean  @default(false) @map("IsCategoryRoot")
+  createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+  isDeleted      Boolean  @default(false) @map("IsDeleted")
+
+  user         User          @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+  category     FileCategory? @relation(fields: [categoryId], references: [categoryId], onDelete: NoAction, onUpdate: NoAction)
+  parentFolder Folder?       @relation("FolderToFolder", fields: [parentFolderId], references: [folderId], onDelete: NoAction, onUpdate: NoAction)
+  subfolders   Folder[]      @relation("FolderToFolder")
+  files        File[]
+  acls         FolderAcl[]
+
+  @@index([userId])
+  @@index([categoryId])
+  @@index([parentFolderId])
+  @@map("Folders")
+}
+
+model File {
+  fileId           String    @id @default(uuid()) @map("FileId") @db.UniqueIdentifier
+  userId           String    @map("UserId") @db.UniqueIdentifier
+  folderId         String?   @map("FolderId") @db.UniqueIdentifier
+  categoryId       String?   @map("CategoryId") @db.UniqueIdentifier
+  /// User-facing vault name; also used as the share/open password (v1 policy).
+  displayName      String    @map("DisplayName") @db.NVarChar(500)
+  originalFileName String    @map("OriginalFileName") @db.NVarChar(500)
+  storedBlobPath   String    @map("StoredBlobPath") @db.NVarChar(1000)
+  mimeType         String?   @map("MimeType") @db.NVarChar(150)
+  sizeBytes        BigInt    @map("SizeBytes")
+  checksum         String    @map("Checksum") @db.Char(64)
+  wrappedDEK       Bytes     @map("WrappedDEK") @db.VarBinary(512)
+  iv               Bytes     @map("IV") @db.VarBinary(32)
+  authTag          Bytes     @map("AuthTag") @db.VarBinary(32)
+  /// Argon2id encoded hash of the per-file access password (never plaintext).
+  accessPasswordHash String  @map("AccessPasswordHash") @db.NVarChar(500)
+  source           String    @default("upload") @map("Source") @db.NVarChar(50)
+  batchId          String?   @map("BatchId") @db.UniqueIdentifier
+  version          Int       @default(1) @map("Version")
+  createdAt        DateTime  @default(now()) @map("CreatedAt") @db.DateTime2
+  updatedAt        DateTime  @default(now()) @map("UpdatedAt") @db.DateTime2
+  isDeleted        Boolean   @default(false) @map("IsDeleted")
+  deletedAt        DateTime? @map("DeletedAt") @db.DateTime2
+
+  user        User              @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+  folder      Folder?           @relation(fields: [folderId], references: [folderId], onDelete: NoAction, onUpdate: NoAction)
+  category    FileCategory?     @relation(fields: [categoryId], references: [categoryId], onDelete: NoAction, onUpdate: NoAction)
+  permissions FilePermission[]
+  tags        FileTag[]
+  versions    FileVersion[]
+  auditLogs   AuditLog[]
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([categoryId])
+  @@index([isDeleted])
+  @@index([batchId])
+  @@map("Files")
+}
+
+model FilePermission {
+  fileId      String @map("FileId") @db.UniqueIdentifier
+  userId      String @map("UserId") @db.UniqueIdentifier
+  accessLevel String @default("read") @map("AccessLevel") @db.NVarChar(20)
+
+  file File @relation(fields: [fileId], references: [fileId], onDelete: NoAction, onUpdate: NoAction)
+  user User @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([fileId, userId])
+  @@map("FilePermissions")
+}
+
+/// Atomic permission catalog (VIEW, EDIT, COPY, DELETE, ADMIN_*).
+model Permission {
+  permissionId String @id @default(uuid()) @map("PermissionId") @db.UniqueIdentifier
+  code         String @unique @map("Code") @db.NVarChar(50)
+  name         String @map("Name") @db.NVarChar(100)
+  description  String? @map("Description") @db.NVarChar(300)
+
+  rolePermissions RolePermission[]
+
+  @@map("Permissions")
+}
+
+model Role {
+  roleId      String   @id @default(uuid()) @map("RoleId") @db.UniqueIdentifier
+  code        String   @unique @map("Code") @db.NVarChar(50)
+  name        String   @map("Name") @db.NVarChar(100)
+  description String?  @map("Description") @db.NVarChar(300)
+  isSystem    Boolean  @default(true) @map("IsSystem")
+  createdAt   DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("Roles")
+}
+
+model RolePermission {
+  roleId       String @map("RoleId") @db.UniqueIdentifier
+  permissionId String @map("PermissionId") @db.UniqueIdentifier
+
+  role       Role       @relation(fields: [roleId], references: [roleId], onDelete: NoAction, onUpdate: NoAction)
+  permission Permission @relation(fields: [permissionId], references: [permissionId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([roleId, permissionId])
+  @@map("RolePermissions")
+}
+
+model UserRole {
+  userId     String   @map("UserId") @db.UniqueIdentifier
+  roleId     String   @map("RoleId") @db.UniqueIdentifier
+  assignedAt DateTime @default(now()) @map("AssignedAt") @db.DateTime2
+  assignedBy String?  @map("AssignedBy") @db.UniqueIdentifier
+
+  user User @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+  role Role @relation(fields: [roleId], references: [roleId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("UserRoles")
+}
+
+/// Folder ACL: principal is USER or ROLE. Rights are independent booleans.
+model FolderAcl {
+  folderAclId  String   @id @default(uuid()) @map("FolderAclId") @db.UniqueIdentifier
+  folderId     String   @map("FolderId") @db.UniqueIdentifier
+  /// USER | ROLE
+  principalType String  @map("PrincipalType") @db.NVarChar(10)
+  /// UserId when USER; RoleId when ROLE
+  principalId  String   @map("PrincipalId") @db.UniqueIdentifier
+  canView      Boolean  @default(true) @map("CanView")
+  canEdit      Boolean  @default(false) @map("CanEdit")
+  canCopy      Boolean  @default(false) @map("CanCopy")
+  canDelete    Boolean  @default(false) @map("CanDelete")
+  /// When true, applies to this folder and descendants until overridden.
+  inherit      Boolean  @default(true) @map("Inherit")
+  grantedBy    String?  @map("GrantedBy") @db.UniqueIdentifier
+  grantedAt    DateTime @default(now()) @map("GrantedAt") @db.DateTime2
+
+  folder  Folder @relation(fields: [folderId], references: [folderId], onDelete: NoAction, onUpdate: NoAction)
+  granter User?  @relation("FolderAclGrantedBy", fields: [grantedBy], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([folderId, principalType, principalId], map: "UQ_FolderAcls_Folder_Principal")
+  @@index([principalType, principalId])
+  @@index([folderId])
+  @@map("FolderAcls")
+}
+
+model AuditLog {
+  logId       BigInt   @id @default(autoincrement()) @map("LogId")
+  userId      String?  @map("UserId") @db.UniqueIdentifier
+  fileId      String?  @map("FileId") @db.UniqueIdentifier
+  action      String   @map("Action") @db.NVarChar(100)
+  details     String?  @map("Details") @db.NVarChar(Max)
+  ipOrDevice  String?  @map("IPOrDevice") @db.NVarChar(200)
+  timestamp   DateTime @default(now()) @map("Timestamp") @db.DateTime2
+
+  file File? @relation(fields: [fileId], references: [fileId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([timestamp, userId])
+  @@index([fileId])
+  @@map("AuditLogs")
+}
+
+model Tag {
+  tagId    String @id @default(uuid()) @map("TagId") @db.UniqueIdentifier
+  userId   String @map("UserId") @db.UniqueIdentifier
+  name     String @map("Name") @db.NVarChar(100)
+  colorHex String @default("#6366F1") @map("ColorHex") @db.Char(7)
+
+  user  User      @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+  files FileTag[]
+
+  @@index([userId])
+  @@map("Tags")
+}
+
+model FileTag {
+  fileId String @map("FileId") @db.UniqueIdentifier
+  tagId  String @map("TagId") @db.UniqueIdentifier
+
+  file File @relation(fields: [fileId], references: [fileId], onDelete: NoAction, onUpdate: NoAction)
+  tag  Tag  @relation(fields: [tagId], references: [tagId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([fileId, tagId])
+  @@map("FileTags")
+}
+
+model FileVersion {
+  versionId      String   @id @default(uuid()) @map("VersionId") @db.UniqueIdentifier
+  fileId         String   @map("FileId") @db.UniqueIdentifier
+  versionNumber  Int      @map("VersionNumber")
+  storedBlobPath String   @map("StoredBlobPath") @db.NVarChar(1000)
+  wrappedDEK     Bytes    @map("WrappedDEK") @db.VarBinary(512)
+  iv             Bytes    @map("IV") @db.VarBinary(32)
+  authTag        Bytes    @map("AuthTag") @db.VarBinary(32)
+  createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
+
+  file File @relation(fields: [fileId], references: [fileId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([fileId])
+  @@map("FileVersions")
+}
+
+model Device {
+  deviceId   String   @id @default(uuid()) @map("DeviceId") @db.UniqueIdentifier
+  userId     String   @map("UserId") @db.UniqueIdentifier
+  deviceName String?  @map("DeviceName") @db.NVarChar(150)
+  os         String?  @map("OS") @db.NVarChar(50)
+  lastSeenAt DateTime @default(now()) @map("LastSeenAt") @db.DateTime2
+
+  user User @relation(fields: [userId], references: [userId], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("Devices")
+}

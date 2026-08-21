@@ -1,0 +1,263 @@
+/**
+ * Shared IPC channel names and DTOs.
+ * Keep secrets (KEK/DEK) out of these payloads — never send key material to the renderer.
+ */
+
+export const IpcChannels = {
+  auth: {
+    register: 'auth:register',
+    login: 'auth:login',
+    lock: 'auth:lock',
+    session: 'auth:session',
+    touch: 'auth:touch',
+    changePassword: 'auth:changePassword'
+  },
+  files: {
+    add: 'files:add',
+    get: 'files:get',
+    list: 'files:list',
+    delete: 'files:delete',
+    open: 'files:open',
+    download: 'files:download',
+    move: 'files:move',
+    copy: 'files:copy'
+  },
+  folders: {
+    list: 'folders:list',
+    create: 'folders:create',
+    delete: 'folders:delete'
+  },
+  categories: {
+    list: 'categories:list',
+    ensure: 'categories:ensure',
+    create: 'categories:create'
+  },
+  admin: {
+    listUsers: 'admin:listUsers',
+    createUser: 'admin:createUser',
+    setUserRoles: 'admin:setUserRoles',
+    setUserDisabled: 'admin:setUserDisabled',
+    listRoles: 'admin:listRoles',
+    listAclFolders: 'admin:listAclFolders',
+    listFolderAcls: 'admin:listFolderAcls',
+    setFolderAcl: 'admin:setFolderAcl',
+    revokeFolderAcl: 'admin:revokeFolderAcl',
+    getMyAccess: 'admin:getMyAccess'
+  },
+  events: {
+    vaultLocked: 'vault:locked'
+  }
+} as const
+
+/** Safe user profile returned to the renderer (no salts/keys). */
+export interface AuthUserDto {
+  userId: string
+  username: string
+  /** Primary legacy role code (admin/member/…). */
+  role: string
+  /** Authoritative role codes from UserRoles (ADMIN, MEMBER, …). */
+  roles: string[]
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+export interface AuthSessionDto {
+  unlocked: boolean
+  user: AuthUserDto | null
+  idleTimeoutMs: number
+}
+
+export interface AuthResultDto {
+  user: AuthUserDto
+  session: AuthSessionDto
+}
+
+export interface RegisterPayload {
+  username: string
+  password: string
+}
+
+export interface LoginPayload {
+  username: string
+  password: string
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface FileCategoryDto {
+  categoryId: string
+  code: string
+  name: string
+  sortOrder: number
+  isSystem: boolean
+}
+
+export interface FileDto {
+  fileId: string
+  folderId: string | null
+  categoryId: string | null
+  displayName: string
+  originalFileName: string
+  mimeType: string | null
+  sizeBytes: string
+  checksum: string
+  source: string
+  version: number
+  createdAt: string
+  updatedAt: string
+  categoryName: string | null
+}
+
+export interface FolderDto {
+  folderId: string
+  parentFolderId: string | null
+  categoryId: string | null
+  name: string
+  isCategoryRoot: boolean
+  createdAt: string
+  /** Effective ACL rights for the current user (Phase 1 RBAC). */
+  rights: {
+    view: boolean
+    edit: boolean
+    copy: boolean
+    delete: boolean
+  }
+}
+
+export interface FolderRightsDto {
+  view: boolean
+  edit: boolean
+  copy: boolean
+  delete: boolean
+}
+
+export interface AddFilePayload {
+  sourcePath: string
+  /** Vault display name — also becomes the per-file access password (v1). */
+  displayName: string
+  categoryId: string
+  folderId?: string | null
+}
+
+export interface ListFilesFilter {
+  folderId?: string | null
+  categoryId?: string | null
+}
+
+export interface CreateFolderPayload {
+  name: string
+  /** Parent folder (category root or user subfolder). */
+  parentFolderId: string
+}
+
+export interface CreateCategoryPayload {
+  name: string
+  code?: string
+}
+
+export interface MoveFilePayload {
+  fileId: string
+  /** Destination folder (must share the file's category). */
+  targetFolderId: string
+}
+
+export interface CopyFilePayload {
+  fileId: string
+  /** Destination folder (must share the file's category). */
+  targetFolderId: string
+}
+
+export interface PasswordFilePayload {
+  fileId: string
+  password: string
+}
+
+export interface GetFileResult {
+  fileId: string
+  displayName: string
+  originalFileName: string
+  mimeType: string | null
+  checksum: string
+  /** Temporary plaintext path in OS temp — delete after use. */
+  tempPath: string
+}
+
+export interface DownloadFileResult {
+  fileId: string
+  savedPath: string
+  /** Decrypted original file with uploaded extension. */
+  format: 'original'
+}
+
+export interface AdminUserDto {
+  userId: string
+  username: string
+  role: string
+  roles: string[]
+  isDisabled: boolean
+  createdAt: string
+  lastLoginAt: string | null
+}
+
+export interface RoleDto {
+  roleId: string
+  code: string
+  name: string
+  description: string | null
+  isSystem: boolean
+  permissions: string[]
+}
+
+export interface FolderAclDto {
+  folderAclId: string
+  folderId: string
+  principalType: 'USER' | 'ROLE'
+  principalId: string
+  principalLabel: string
+  canView: boolean
+  canEdit: boolean
+  canCopy: boolean
+  canDelete: boolean
+  inherit: boolean
+  grantedAt: string
+}
+
+export interface AdminCreateUserPayload {
+  username: string
+  password: string
+  roleCode: string
+  /** If true, grants full rights on all category roots. */
+  grantAllCategoryRoots?: boolean
+}
+
+export interface AdminSetUserRolesPayload {
+  userId: string
+  roleCodes: string[]
+}
+
+export interface AdminSetFolderAclPayload {
+  folderId: string
+  principalType: 'USER' | 'ROLE'
+  principalId: string
+  canView: boolean
+  canEdit: boolean
+  canCopy: boolean
+  canDelete: boolean
+  inherit?: boolean
+}
+
+export interface MyAccessEntryDto {
+  folderId: string
+  folderName: string
+  path: string
+  isCategoryRoot: boolean
+  rights: {
+    view: boolean
+    edit: boolean
+    copy: boolean
+    delete: boolean
+  }
+}

@@ -1,0 +1,135 @@
+@import '@fontsource-variable/outfit';
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant light (&:is(.light *));
+
+/*
+  Section 10 — Design tokens (dark-first, with light mode)
+
+  | Token             | Dark      | Light     | Use                          |
+  |-------------------|-----------|-----------|------------------------------|
+  | --bg-base         | #0F1115   | #FAFAFA   | App background               |
+  | --bg-surface      | #171A21   | #FFFFFF   | Cards, panels, sidebar       |
+  | --bg-elevated     | #1F232C   | #F2F3F5   | Modals, dropdowns            |
+  | --border          | #2A2E37   | #E4E6EA   | Dividers                     |
+  | --text-primary    | #F3F4F6   | #111318   | Headings, file names         |
+  | --text-secondary  | #9AA1AE   | #5B616E   | Metadata, muted text         |
+  | --accent-primary  | #6366F1   | #4F46E5   | Buttons, active tabs, links  |
+  | --accent-success  | #22C55E   | #16A34A   | Encrypted / unlocked states  |
+  | --accent-warning  | #F59E0B   | #D97706   | Warnings                     |
+  | --accent-danger   | #EF4444   | #DC2626   | Delete, lock errors          |
+*/
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-surface);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--accent-primary);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--bg-elevated);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-elevated);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--bg-elevated);
+  --color-accent-foreground: var(--text-primary);
+  --color-destructive: var(--accent-danger);
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--accent-primary);
+  --color-sv-bg: var(--bg-base);
+  --color-sv-surface: var(--bg-surface);
+  --color-sv-surface-raised: var(--bg-elevated);
+  --color-sv-border: var(--border);
+  --color-sv-text: var(--text-primary);
+  --color-sv-text-muted: var(--text-secondary);
+  --color-sv-accent: var(--accent-primary);
+  --color-sv-accent-fg: #ffffff;
+  --color-sv-danger: var(--accent-danger);
+  --color-sv-success: var(--accent-success);
+  --color-sv-warning: var(--accent-warning);
+  --font-sans: 'Outfit Variable', 'Outfit', sans-serif;
+}
+
+:root,
+.dark {
+  color-scheme: dark;
+  --radius: 0.625rem;
+  --sv-titlebar-height: 44px;
+  --sv-sidebar-width: min(280px, 86vw);
+  --sv-radius: 10px;
+
+  --bg-base: #0f1115;
+  --bg-surface: #171a21;
+  --bg-elevated: #1f232c;
+  --border: #2a2e37;
+  --text-primary: #f3f4f6;
+  --text-secondary: #9aa1ae;
+  --accent-primary: #6366f1;
+  --accent-success: #22c55e;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+}
+
+.light {
+  color-scheme: light;
+  --bg-base: #fafafa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f2f3f5;
+  --border: #e4e6ea;
+  --text-primary: #111318;
+  --text-secondary: #5b616e;
+  --accent-primary: #4f46e5;
+  --accent-success: #16a34a;
+  --accent-warning: #d97706;
+  --accent-danger: #dc2626;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    height: 100dvh;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    margin: 0;
+    font-family: var(--font-sans);
+    background:
+      radial-gradient(1000px 520px at 12% -8%, rgb(99 102 241 / 14%), transparent 55%),
+      radial-gradient(800px 420px at 92% 0%, rgb(34 197 94 / 6%), transparent 50%),
+      var(--bg-base);
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (min-width: 768px) {
+    :root,
+    .dark {
+      --sv-titlebar-height: 40px;
+      --sv-sidebar-width: 240px;
+    }
+  }
+}
+
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
