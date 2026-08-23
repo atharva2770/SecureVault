@@ -1,14 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  FolderLock,
   HelpCircle,
   KeyRound,
   LogOut,
   Monitor,
   Palette,
   ShieldCheck,
-  UserPlus,
   UserRound,
   Users
 } from 'lucide-react'
@@ -61,7 +59,7 @@ function MenuItem({
 }
 
 export default function ProfileMenu({ open, onClose }: ProfileMenuProps): React.JSX.Element | null {
-  const { user, canManageUsers, canManageAcls, signOut } = useAuth()
+  const { user, canManageUsers, signOut } = useAuth()
   const navigate = useNavigate()
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -140,7 +138,7 @@ export default function ProfileMenu({ open, onClose }: ProfileMenuProps): React.
         />
       </div>
 
-      {canManageUsers || canManageAcls ? (
+      {canManageUsers ? (
         <>
           <div className="h-px bg-sv-border" />
           <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sv-text-muted">
@@ -148,26 +146,10 @@ export default function ProfileMenu({ open, onClose }: ProfileMenuProps): React.
           </p>
           <div className="pb-1">
             {canManageUsers ? (
-              <>
-                <MenuItem
-                  to="/admin/users"
-                  icon={<UserPlus className="size-4" />}
-                  label="Add user rights"
-                  onClick={onClose}
-                />
-                <MenuItem
-                  to="/admin/rights"
-                  icon={<Users className="size-4" />}
-                  label="Change user rights"
-                  onClick={onClose}
-                />
-              </>
-            ) : null}
-            {canManageAcls ? (
               <MenuItem
-                to="/admin/folders"
-                icon={<FolderLock className="size-4" />}
-                label="Folder permissions"
+                to="/admin/users"
+                icon={<Users className="size-4" />}
+                label="People & folders"
                 onClick={onClose}
               />
             ) : null}

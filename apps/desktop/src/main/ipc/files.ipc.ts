@@ -6,7 +6,8 @@ import type {
   CopyFilePayload,
   ListFilesFilter,
   MoveFilePayload,
-  PasswordFilePayload
+  PasswordFilePayload,
+  RenameFilePayload
 } from '../../shared/ipc'
 import { FileService } from '../services/FileService'
 import { requireDesktopActor, requireDesktopUserId } from '../session/desktopActor'
@@ -92,6 +93,14 @@ export function registerFilesIpc(): void {
   ipcMain.handle(IpcChannels.files.copy, async (_event, payload: CopyFilePayload) => {
     try {
       return await FileService.getInstance().copyFile(requireDesktopUserId(), payload)
+    } catch (error) {
+      throw toIpcError(error)
+    }
+  })
+
+  ipcMain.handle(IpcChannels.files.rename, async (_event, payload: RenameFilePayload) => {
+    try {
+      return await FileService.getInstance().renameFile(requireDesktopUserId(), payload)
     } catch (error) {
       throw toIpcError(error)
     }

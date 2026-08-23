@@ -24,6 +24,7 @@ import type {
   MoveFilePayload,
   PasswordFilePayload,
   RegisterPayload,
+  RenameFilePayload,
   RoleDto
 } from '../shared/ipc'
 
@@ -119,6 +120,9 @@ const api = {
     },
     copyFile: (payload: CopyFilePayload): Promise<FileDto> => {
       return ipcRenderer.invoke(IpcChannels.files.copy, payload)
+    },
+    renameFile: (payload: RenameFilePayload): Promise<FileDto> => {
+      return ipcRenderer.invoke(IpcChannels.files.rename, payload)
     }
   },
 
@@ -169,6 +173,9 @@ const api = {
   },
   copyFile: (payload: CopyFilePayload): Promise<FileDto> => {
     return ipcRenderer.invoke(IpcChannels.files.copy, payload)
+  },
+  renameFile: (payload: RenameFilePayload): Promise<FileDto> => {
+    return ipcRenderer.invoke(IpcChannels.files.rename, payload)
   },
   listFolders: (): Promise<FolderDto[]> => {
     return ipcRenderer.invoke(IpcChannels.folders.list)

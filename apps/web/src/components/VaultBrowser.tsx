@@ -22,6 +22,7 @@ import {
   Lock,
   Menu,
   MoveRight,
+  Pencil,
   Scissors,
   Search,
   Trash2,
@@ -33,6 +34,7 @@ import type { FileDto, FolderDto } from '@securevault/domain'
 import { api } from '@/api/vault'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
+import RenameFileModal from '@/components/RenameFileModal'
 import VaultContextMenu, {
   type ContextMenuTarget,
   type VaultContextMenuState
@@ -246,6 +248,8 @@ export default function VaultBrowser(): React.JSX.Element {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [moveTarget, setMoveTarget] = useState<FileDto | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
+  const [renameTarget, setRenameTarget] = useState<FileDto | null>(null)
+  const [renameError, setRenameError] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
@@ -358,6 +362,20 @@ export default function VaultBrowser(): React.JSX.Element {
     },
     onError: (error: Error) => {
       setMoveError(error.message || 'Move failed.')
+    }
+  })
+
+  const renameMutation = useMutation({
+    mutationFn: (payload: { fileId: string; displayName: string }) => api.renameFile(payload),
+    onSuccess: async (file) => {
+      setRenameTarget(null)
+      setRenameError(null)
+      setStatus(`Renamed to “${file.displayName}”.`)
+      await queryClient.invalidateQueries({ queryKey: ['files'] })
+      void api.auth.touch()
+    },
+    onError: (error: Error) => {
+      setRenameError(error.message || 'Rename failed.')
     }
   })
 
@@ -752,7 +770,7 @@ export default function VaultBrowser(): React.JSX.Element {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (isTypingTarget(event.target)) return
-      if (passwordTarget || pendingUpload || moveTarget) return
+      if (passwordTarget || pendingUpload || moveTarget || renameTarget) return
 
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
@@ -775,6 +793,15 @@ export default function VaultBrowser(): React.JSX.Element {
       if (mod && key === 'a') {
         event.preventDefault()
         setSelectedFileIds(visibleFiles.map((f) => f.fileId))
+        return
+      }
+      if (key === 'f2') {
+        const fileId = selectedFileIds.length === 1 ? selectedFileIds[0] : null
+        const file = fileId ? visibleFiles.find((f) => f.fileId === fileId) : null
+        if (!file) return
+        event.preventDefault()
+        setRenameError(null)
+        setRenameTarget(file)
         return
       }
       if (key === 'delete' || key === 'backspace') {
@@ -800,7 +827,8 @@ export default function VaultBrowser(): React.JSX.Element {
     visibleFiles,
     passwordTarget,
     pendingUpload,
-    moveTarget
+    moveTarget,
+    renameTarget
   ])
 
   const isEmpty = !isSearching && visibleFolders.length === 0 && visibleFiles.length === 0
@@ -1400,6 +1428,18 @@ export default function VaultBrowser(): React.JSX.Element {
                             <Button
                               size="icon"
                               variant="ghost"
+                              className="hidden size-7 sm:inline-flex"
+                              title="Rename"
+                              onClick={() => {
+                                setRenameError(null)
+                                setRenameTarget(file)
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
                               className="size-8 text-sv-danger hover:text-sv-danger md:size-7"
                               title="Delete"
                               onClick={() => deleteSelectedFiles([file.fileId])}
@@ -1438,6 +1478,19 @@ export default function VaultBrowser(): React.JSX.Element {
             void pasteClipboard()
             setContextMenu(null)
           }}
+          onRename={
+            contextMenu.target.kind === 'file'
+              ? () => {
+                  const target = contextMenu.target
+                  const file = target.kind === 'file' ? fileById.get(target.fileId) : undefined
+                  if (file) {
+                    setRenameError(null)
+                    setRenameTarget(file)
+                  }
+                  setContextMenu(null)
+                }
+              : undefined
+          }
           onDelete={() => {
             if (contextMenu.target.kind === 'file') {
               deleteSelectedFiles([contextMenu.target.fileId])
@@ -1499,6 +1552,21 @@ export default function VaultBrowser(): React.JSX.Element {
           }}
           onConfirm={(targetFolderId) => {
             void moveFileToFolder(moveTarget.fileId, targetFolderId)
+          }}
+        />
+      ) : null}
+
+      {renameTarget ? (
+        <RenameFileModal
+          file={renameTarget}
+          submitting={renameMutation.isPending}
+          error={renameError}
+          onCancel={() => {
+            setRenameTarget(null)
+            setRenameError(null)
+          }}
+          onConfirm={(displayName) => {
+            void renameMutation.mutateAsync({ fileId: renameTarget.fileId, displayName })
           }}
         />
       ) : null}

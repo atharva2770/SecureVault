@@ -23,12 +23,14 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
         password?: string
         roleCode?: string
         grantAllCategoryRoots?: boolean
+        folderIds?: string[]
       }
       return await admin.createUser(session.userId, {
         username: body.username ?? '',
         password: body.password ?? '',
         roleCode: body.roleCode ?? 'MEMBER',
-        grantAllCategoryRoots: body.grantAllCategoryRoots
+        grantAllCategoryRoots: body.grantAllCategoryRoots,
+        folderIds: Array.isArray(body.folderIds) ? body.folderIds : undefined
       })
     } catch (error) {
       return sendError(reply, error)
@@ -55,6 +57,27 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       const { userId } = request.params as { userId: string }
       const body = (request.body ?? {}) as { isDisabled?: boolean }
       return await admin.setUserDisabled(session.userId, userId, Boolean(body.isDisabled))
+    } catch (error) {
+      return sendError(reply, error)
+    }
+  })
+
+  app.get('/api/admin/users/:userId/folder-access', async (request, reply) => {
+    try {
+      const session = requireSession(request)
+      const { userId } = request.params as { userId: string }
+      return await admin.getUserFolderAccess(session.userId, userId)
+    } catch (error) {
+      return sendError(reply, error)
+    }
+  })
+
+  app.put('/api/admin/users/:userId/folder-access', async (request, reply) => {
+    try {
+      const session = requireSession(request)
+      const { userId } = request.params as { userId: string }
+      const body = (request.body ?? {}) as { folderIds?: string[] }
+      return await admin.setUserFolderAccess(session.userId, userId, body.folderIds ?? [])
     } catch (error) {
       return sendError(reply, error)
     }

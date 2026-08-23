@@ -2,17 +2,24 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 interface PageShellProps {
   title: string
   subtitle?: string
   children: React.ReactNode
+  wide?: boolean
 }
 
-export default function PageShell({ title, subtitle, children }: PageShellProps): React.JSX.Element {
+export default function PageShell({
+  title,
+  subtitle,
+  children,
+  wide = false
+}: PageShellProps): React.JSX.Element {
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className={cn('mx-auto px-4 py-6 sm:px-6', wide ? 'max-w-6xl' : 'max-w-5xl')}>
         <div className="mb-6">
           <Button asChild size="sm" variant="ghost" className="-ml-2 mb-3 h-8 gap-1.5">
             <Link to="/">

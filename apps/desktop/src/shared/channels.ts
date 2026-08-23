@@ -19,7 +19,8 @@ export const IpcChannels = {
     open: 'files:open',
     download: 'files:download',
     move: 'files:move',
-    copy: 'files:copy'
+    copy: 'files:copy',
+    rename: 'files:rename'
   },
   folders: {
     list: 'folders:list',

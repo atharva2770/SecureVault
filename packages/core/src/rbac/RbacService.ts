@@ -128,6 +128,50 @@ export class RbacService {
     this.acl.invalidateUser(userId)
   }
 
+  async listUserFolderAccess(userId: string): Promise<string[]> {
+    const rows = await this.prisma.folderAcl.findMany({
+      where: { principalType: 'USER', principalId: userId },
+      select: { folderId: true }
+    })
+    return rows.map((r) => r.folderId)
+  }
+
+  /**
+   * Replaces this user's folder checkboxes: each id gets full use of that folder and its subfolders.
+   */
+  async replaceUserFolderAccess(
+    userId: string,
+    folderIds: string[],
+    grantedBy?: string | null
+  ): Promise<string[]> {
+    const unique = [...new Set(folderIds.map((id) => id.trim()).filter(Boolean))]
+    const folders = unique.length
+      ? await this.prisma.folder.findMany({
+          where: { folderId: { in: unique }, isDeleted: false },
+          select: { folderId: true }
+        })
+      : []
+    const validIds = folders.map((f) => f.folderId)
+
+    await this.prisma.folderAcl.deleteMany({
+      where: { principalType: 'USER', principalId: userId }
+    })
+
+    for (const folderId of validIds) {
+      await this.upsertUserFolderAcl(folderId, userId, {
+        canView: true,
+        canEdit: true,
+        canCopy: true,
+        canDelete: true,
+        inherit: true,
+        grantedBy: grantedBy ?? null
+      })
+    }
+
+    this.acl.invalidateUser(userId)
+    return validIds
+  }
+
   async upsertUserFolderAcl(
     folderId: string,
     userId: string,

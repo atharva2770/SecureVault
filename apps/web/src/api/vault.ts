@@ -19,7 +19,9 @@ import type {
   MoveFilePayload,
   PasswordFilePayload,
   RegisterPayload,
-  RoleDto
+  RenameFilePayload,
+  RoleDto,
+  UserFolderAccessDto
 } from '@securevault/domain'
 
 export class SessionLockedError extends Error {
@@ -173,6 +175,11 @@ export const api = {
         method: 'POST',
         ...jsonBody({ targetFolderId: payload.targetFolderId })
       }),
+    renameFile: (payload: RenameFilePayload) =>
+      json<FileDto>(`/api/files/${payload.fileId}/rename`, {
+        method: 'POST',
+        ...jsonBody({ displayName: payload.displayName })
+      }),
     openFile: async (payload: PasswordFilePayload): Promise<GetFileResult> => {
       const { fileName, mimeType } = await downloadBlob(
         payload.fileId,
@@ -233,6 +240,13 @@ export const api = {
     listAclFolders: () => json<FolderDto[]>('/api/admin/folders'),
     listFolderAcls: (folderId: string) =>
       json<FolderAclDto[]>(`/api/admin/folders/${folderId}/acls`),
+    getUserFolderAccess: (userId: string) =>
+      json<UserFolderAccessDto>(`/api/admin/users/${userId}/folder-access`),
+    setUserFolderAccess: (userId: string, folderIds: string[]) =>
+      json<UserFolderAccessDto>(`/api/admin/users/${userId}/folder-access`, {
+        method: 'PUT',
+        ...jsonBody({ folderIds })
+      }),
     setFolderAcl: (payload: AdminSetFolderAclPayload) =>
       json<FolderAclDto[]>(`/api/admin/folders/${payload.folderId}/acls`, {
         method: 'PUT',
@@ -256,6 +270,7 @@ export const api = {
   deleteFile: (fileId: string) => api.files.deleteFile(fileId),
   moveFile: (payload: MoveFilePayload) => api.files.moveFile(payload),
   copyFile: (payload: CopyFilePayload) => api.files.copyFile(payload),
+  renameFile: (payload: RenameFilePayload) => api.files.renameFile(payload),
   openFile: (payload: PasswordFilePayload) => api.files.openFile(payload),
   downloadFile: (payload: PasswordFilePayload) => api.files.downloadFile(payload),
   createFolder: (payload: CreateFolderPayload) => api.folders.createFolder(payload),

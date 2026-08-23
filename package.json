@@ -8,8 +8,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @securevault/desktop",
-    "dev:desktop": "npm run dev -w @securevault/desktop",
+    "dev": "npm run desktop",
+    "desktop": "npm run dev -w @securevault/desktop",
+    "web": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:open -w @securevault/web\"",
+    "dev:desktop": "npm run desktop",
     "dev:api": "npm run dev -w @securevault/api",
     "dev:web": "npm run dev -w @securevault/web",
     "start": "npm run start -w @securevault/desktop",
@@ -28,5 +30,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

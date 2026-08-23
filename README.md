@@ -148,30 +148,27 @@ Generate the Prisma client after schema changes (`npm install` already does this
 npm run db:generate
 ```
 
-### 5. Start development
+### 5. Start the desktop app
 
 ```bash
-npm run dev
+npm run desktop
 ```
 
-The app opens with a frameless window. The **first registered user** automatically receives the **Admin** role.
+The Electron window opens. The **first registered user** automatically receives the **Admin** role.
 
-### 6. Web UI
-
-In a second terminal, start the API, then the web app:
+### 6. Start the web app
 
 ```bash
-npm run dev:api
+npm run web
+```
+
+This starts the API on port **4000** and the React UI on **http://localhost:5173**, and opens the browser. Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
+
+To run the UI only (API already running):
+
+```bash
 npm run dev:web
 ```
-
-Open http://localhost:5173 — Vite proxies `/api` to port 4000 so the session cookie stays on `localhost`.
-
-Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
-
-### 7. Desktop via the same API (Phase 5)
-
-With `DESKTOP_USE_WEB_UI=true` (default in `.env`), `npm run dev:desktop` opens the web UI inside Electron. Start **API + web** first. If http://localhost:5173 is down, the window falls back to the legacy IPC renderer.
 
 ---
 
@@ -179,9 +176,11 @@ With `DESKTOP_USE_WEB_UI=true` (default in `.env`), `npm run dev:desktop` opens 
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the desktop app (Electron) with hot reload |
-| `npm run dev:api` | Start the local web API on http://127.0.0.1:4000 |
-| `npm run dev:web` | Start the React web UI on http://localhost:5173 |
+| `npm run desktop` | Open the **desktop** Electron app |
+| `npm run web` | Open the **web** app (API + UI, browser) |
+| `npm run dev` | Same as `npm run desktop` |
+| `npm run dev:api` | Start only the local API on http://127.0.0.1:4000 |
+| `npm run dev:web` | Start only the React UI on http://localhost:5173 |
 | `npm run build` | Typecheck and build the desktop app |
 | `npm run start` | Preview the production desktop build |
 | `npm run build:win` | Build Windows installer (NSIS) |
@@ -275,7 +274,7 @@ Core tables include:
 - **Phase 2 (done)** — local Fastify API on port 4000; session cookie auth; folders/files list/admin ACL JSON; same SQL Server
 - **Phase 3 (done)** — encrypted blobs + local KMS wrapping; streaming upload/download; per-file password verified on the API
 - **Phase 4 (done)** — web UI (Unlock, VaultBrowser, Admin) over HTTP on port 5173
-- **Phase 5 (done)** — desktop loads the web UI (`WEB_ORIGIN`) and uses the same HTTP API; set `DESKTOP_USE_WEB_UI=false` for the legacy IPC renderer
+- **Phase 5 (done)** — desktop and web are separate apps. `npm run desktop` is Electron/IPC; `npm run web` is the browser UI + API. Set `DESKTOP_USE_WEB_UI=true` only if Electron should wrap the web UI
 
 ---
 

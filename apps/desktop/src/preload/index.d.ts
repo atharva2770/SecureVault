@@ -21,6 +21,7 @@ import type {
   MoveFilePayload,
   PasswordFilePayload,
   RegisterPayload,
+  RenameFilePayload,
   RoleDto
 } from '../shared/ipc'
 
@@ -63,6 +64,7 @@ export interface Api {
     deleteFile: (fileId: string) => Promise<FileDto>
     moveFile: (payload: MoveFilePayload) => Promise<FileDto>
     copyFile: (payload: CopyFilePayload) => Promise<FileDto>
+    renameFile: (payload: RenameFilePayload) => Promise<FileDto>
   }
   folders: {
     listFolders: () => Promise<FolderDto[]>
@@ -102,6 +104,7 @@ export interface Api {
   deleteFile: (fileId: string) => Promise<FileDto>
   moveFile: (payload: MoveFilePayload) => Promise<FileDto>
   copyFile: (payload: CopyFilePayload) => Promise<FileDto>
+  renameFile: (payload: RenameFilePayload) => Promise<FileDto>
   listFolders: () => Promise<FolderDto[]>
   createFolder: (payload: CreateFolderPayload) => Promise<FolderDto>
   deleteFolder: (folderId: string) => Promise<FolderDto>
@@ -133,5 +136,6 @@ export type {
   ListFilesFilter,
   MoveFilePayload,
   PasswordFilePayload,
+  RenameFilePayload,
   RoleDto
 }

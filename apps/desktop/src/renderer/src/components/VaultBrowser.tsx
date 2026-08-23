@@ -21,6 +21,7 @@ import {
   Lock,
   Menu,
   MoveRight,
+  Pencil,
   Scissors,
   Search,
   Settings,
@@ -33,6 +34,7 @@ import type { FileDto, FolderDto } from '../../../preload/index.d'
 import AdminPanel from '@/components/AdminPanel'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
+import RenameFileModal from '@/components/RenameFileModal'
 import VaultContextMenu, {
   type ContextMenuTarget,
   type VaultContextMenuState
@@ -178,6 +180,16 @@ function apiCopyFile(payload: { fileId: string; targetFolderId: string }): Promi
   return fn(payload)
 }
 
+function apiRenameFile(payload: { fileId: string; displayName: string }): Promise<FileDto> {
+  const fn = window.api.renameFile ?? window.api.files?.renameFile
+  if (typeof fn !== 'function') {
+    throw new Error(
+      'Rename is unavailable. Fully quit SecureVault and run npm run desktop again (preload was outdated).'
+    )
+  }
+  return fn(payload)
+}
+
 function FolderTreeItem({
   node,
   depth,
@@ -263,6 +275,8 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [moveTarget, setMoveTarget] = useState<FileDto | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
+  const [renameTarget, setRenameTarget] = useState<FileDto | null>(null)
+  const [renameError, setRenameError] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
@@ -386,6 +400,20 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
     },
     onError: (error: Error) => {
       setMoveError(error.message || 'Move failed.')
+    }
+  })
+
+  const renameMutation = useMutation({
+    mutationFn: (payload: { fileId: string; displayName: string }) => apiRenameFile(payload),
+    onSuccess: async (file) => {
+      setRenameTarget(null)
+      setRenameError(null)
+      setStatus(`Renamed to “${file.displayName}”.`)
+      await queryClient.invalidateQueries({ queryKey: ['files'] })
+      void window.api.auth.touch()
+    },
+    onError: (error: Error) => {
+      setRenameError(error.message || 'Rename failed.')
     }
   })
 
@@ -785,7 +813,7 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (isTypingTarget(event.target)) return
-      if (passwordTarget || pendingUpload || moveTarget) return
+      if (passwordTarget || pendingUpload || moveTarget || renameTarget) return
 
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
@@ -808,6 +836,15 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
       if (mod && key === 'a') {
         event.preventDefault()
         setSelectedFileIds(visibleFiles.map((f) => f.fileId))
+        return
+      }
+      if (key === 'f2') {
+        const fileId = selectedFileIds.length === 1 ? selectedFileIds[0] : null
+        const file = fileId ? visibleFiles.find((f) => f.fileId === fileId) : null
+        if (!file) return
+        event.preventDefault()
+        setRenameError(null)
+        setRenameTarget(file)
         return
       }
       if (key === 'delete' || key === 'backspace') {
@@ -833,7 +870,8 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
     visibleFiles,
     passwordTarget,
     pendingUpload,
-    moveTarget
+    moveTarget,
+    renameTarget
   ])
 
   const isEmpty = !isSearching && visibleFolders.length === 0 && visibleFiles.length === 0
@@ -1478,6 +1516,18 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
                             <Button
                               size="icon"
                               variant="ghost"
+                              className="hidden size-7 sm:inline-flex"
+                              title="Rename"
+                              onClick={() => {
+                                setRenameError(null)
+                                setRenameTarget(file)
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
                               className="size-8 text-sv-danger hover:text-sv-danger md:size-7"
                               title="Delete"
                               onClick={() => deleteSelectedFiles([file.fileId])}
@@ -1577,6 +1627,21 @@ export default function VaultBrowser({ username, onLocked }: VaultBrowserProps):
           }}
           onConfirm={(targetFolderId) => {
             void moveFileToFolder(moveTarget.fileId, targetFolderId)
+          }}
+        />
+      ) : null}
+
+      {renameTarget ? (
+        <RenameFileModal
+          file={renameTarget}
+          submitting={renameMutation.isPending}
+          error={renameError}
+          onCancel={() => {
+            setRenameTarget(null)
+            setRenameError(null)
+          }}
+          onConfirm={(displayName) => {
+            void renameMutation.mutateAsync({ fileId: renameTarget.fileId, displayName })
           }}
         />
       ) : null}

@@ -11,7 +11,8 @@ import type {
   FileDto,
   GetFileResult,
   ListFilesFilter,
-  MoveFilePayload
+  MoveFilePayload,
+  RenameFilePayload
 } from '../../shared/ipc'
 import { secureZero } from '../utils/secure'
 import { AccessControlService, FileQueryService, isWebBlobUri } from '@securevault/core'
@@ -417,6 +418,60 @@ export class FileService {
       }
       throw error
     }
+  }
+
+  /**
+   * TEMP: rename display name. v1 password === displayName, so the access hash is updated too.
+   */
+  async renameFile(userId: string, payload: RenameFilePayload): Promise<FileDto> {
+    const fileId = payload.fileId?.trim()
+    const displayName = payload.displayName?.trim()
+
+    if (!fileId) throw new Error('fileId is required.')
+    if (!displayName) throw new Error('File name is required.')
+    if (displayName.length > 500) throw new Error('File name is too long.')
+
+    await this.acl.requireFile(fileId, 'edit', userId)
+    const existing = await this.requireAccessibleFile(fileId)
+
+    if (existing.displayName === displayName) {
+      return toFileDto(existing)
+    }
+
+    if (existing.folderId) {
+      const siblings = await this.db.prisma.file.findMany({
+        where: {
+          folderId: existing.folderId,
+          isDeleted: false,
+          fileId: { not: existing.fileId }
+        },
+        select: { displayName: true }
+      })
+      if (siblings.some((f) => f.displayName.toLowerCase() === displayName.toLowerCase())) {
+        throw new Error('A file with that name already exists in this folder.')
+      }
+    }
+
+    const accessPasswordHash = await this.crypto.hashAccessPassword(displayName)
+
+    const record = await this.db.prisma.file.update({
+      where: { fileId: existing.fileId },
+      data: {
+        displayName,
+        accessPasswordHash,
+        updatedAt: new Date()
+      },
+      include: { category: true }
+    })
+
+    await this.audit.write({
+      action: AuditAction.FILE_OPEN,
+      userId,
+      fileId: record.fileId,
+      details: `rename:${existing.displayName}->${displayName}`
+    })
+
+    return toFileDto(record)
   }
 
   private async uniqueCopyName(

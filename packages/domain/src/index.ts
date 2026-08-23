@@ -35,6 +35,7 @@ export type {
   CreateCategoryPayload,
   MoveFilePayload,
   CopyFilePayload,
+  RenameFilePayload,
   PasswordFilePayload,
   GetFileResult,
   DownloadFileResult,
@@ -44,5 +45,6 @@ export type {
   AdminCreateUserPayload,
   AdminSetUserRolesPayload,
   AdminSetFolderAclPayload,
+  UserFolderAccessDto,
   MyAccessEntryDto
 } from './dto'

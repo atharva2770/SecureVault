@@ -7,7 +7,8 @@ import type {
   AdminUserDto,
   FolderAclDto,
   FolderDto,
-  RoleDto
+  RoleDto,
+  UserFolderAccessDto
 } from '@securevault/domain'
 import { PermissionCode, RoleCode } from '@securevault/domain'
 import { AccessControlService } from '../access/AccessControlService'
@@ -133,8 +134,12 @@ export class AdminService {
 
       await this.rbac.replaceRoles(user.userId, [roleCode], actorId)
 
-      if (payload.grantAllCategoryRoots) {
-        await this.rbac.grantFullAccessOnCategoryRoots(user.userId, actorId)
+      if (roleCode !== RoleCode.ADMIN) {
+        if (payload.folderIds?.length) {
+          await this.rbac.replaceUserFolderAccess(user.userId, payload.folderIds, actorId)
+        } else if (payload.grantAllCategoryRoots) {
+          await this.rbac.grantFullAccessOnCategoryRoots(user.userId, actorId)
+        }
       }
 
       await this.audit.write({
@@ -393,6 +398,43 @@ export class AdminService {
     })
 
     return this.listFolderAcls(actorId, row.folderId)
+  }
+
+  async getUserFolderAccess(actorUserId: string, userId: string): Promise<UserFolderAccessDto> {
+    await this.requireAdminOrManager(actorUserId, true)
+    const targetId = userId?.trim()
+    if (!targetId) throw new Error('userId is required.')
+
+    const user = await this.db.prisma.user.findUnique({ where: { userId: targetId } })
+    if (!user) throw new Error('User not found.')
+
+    return {
+      userId: targetId,
+      isAdmin: await this.acl.isAdmin(targetId),
+      folderIds: await this.rbac.listUserFolderAccess(targetId)
+    }
+  }
+
+  async setUserFolderAccess(
+    actorUserId: string,
+    userId: string,
+    folderIds: string[]
+  ): Promise<UserFolderAccessDto> {
+    const actorId = await this.requireAdminOrManager(actorUserId, true)
+    const targetId = userId?.trim()
+    if (!targetId) throw new Error('userId is required.')
+
+    const user = await this.db.prisma.user.findUnique({ where: { userId: targetId } })
+    if (!user) throw new Error('User not found.')
+
+    const granted = await this.rbac.replaceUserFolderAccess(targetId, folderIds, actorId)
+    await this.audit.write({
+      action: AuditAction.ACL_GRANT,
+      userId: actorId,
+      details: `setFolderAccess:${user.username}:${granted.length}`
+    })
+
+    return this.getUserFolderAccess(actorId, targetId)
   }
 
   async getMyAccess(actorUserId: string) {

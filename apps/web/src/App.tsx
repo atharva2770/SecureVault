@@ -3,11 +3,9 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { AuthProvider } from '@/auth/AuthProvider'
-import { RequireAclAdmin, RequireAdmin, RequireAuth } from '@/auth/guards'
+import { RequireAdmin, RequireAuth } from '@/auth/guards'
 import UnlockScreen from '@/components/UnlockScreen'
 import AppLayout from '@/layout/AppLayout'
-import FolderPermissionsPage from '@/pages/admin/FolderPermissionsPage'
-import UserRightsPage from '@/pages/admin/UserRightsPage'
 import UsersPage from '@/pages/admin/UsersPage'
 import ChangePasswordPage from '@/pages/ChangePasswordPage'
 import HelpPage from '@/pages/HelpPage'
@@ -71,19 +69,11 @@ export default function App(): React.JSX.Element {
                   />
                   <Route
                     path="/admin/rights"
-                    element={
-                      <RequireAdmin>
-                        <UserRightsPage />
-                      </RequireAdmin>
-                    }
+                    element={<Navigate to="/admin/users" replace />}
                   />
                   <Route
                     path="/admin/folders"
-                    element={
-                      <RequireAclAdmin>
-                        <FolderPermissionsPage />
-                      </RequireAclAdmin>
-                    }
+                    element={<Navigate to="/admin/users" replace />}
                   />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

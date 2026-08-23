@@ -179,4 +179,18 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, error)
     }
   })
+
+  app.post('/api/files/:fileId/rename', async (request, reply) => {
+    try {
+      const session = requireSession(request)
+      const { fileId } = request.params as { fileId: string }
+      const body = (request.body ?? {}) as { displayName?: string }
+      return await vault.renameFile(session.userId, {
+        fileId,
+        displayName: body.displayName ?? ''
+      })
+    } catch (error) {
+      return sendError(reply, error)
+    }
+  })
 }

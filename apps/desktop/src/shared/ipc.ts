@@ -21,6 +21,7 @@ export type {
   CreateCategoryPayload,
   MoveFilePayload,
   CopyFilePayload,
+  RenameFilePayload,
   PasswordFilePayload,
   GetFileResult,
   DownloadFileResult,

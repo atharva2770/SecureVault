@@ -1,4 +1,10 @@
-import { ClipboardPaste, Copy, Scissors, Trash2 } from 'lucide-react'
+import {
+  ClipboardPaste,
+  Copy,
+  Pencil,
+  Scissors,
+  Trash2
+} from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
@@ -21,6 +27,7 @@ interface VaultContextMenuProps {
   onCopy: () => void
   onPaste: () => void
   onDelete: () => void
+  onRename?: () => void
 }
 
 function MenuItem({
@@ -67,7 +74,8 @@ export default function VaultContextMenu({
   onCut,
   onCopy,
   onPaste,
-  onDelete
+  onDelete,
+  onRename
 }: VaultContextMenuProps): React.JSX.Element {
   const isFile = state.target.kind === 'file'
   const canDelete =
@@ -98,6 +106,9 @@ export default function VaultContextMenu({
           <>
             <MenuItem label="Cut" icon={<Scissors className="size-3.5" />} onClick={onCut} />
             <MenuItem label="Copy" icon={<Copy className="size-3.5" />} onClick={onCopy} />
+            {onRename ? (
+              <MenuItem label="Rename" icon={<Pencil className="size-3.5" />} onClick={onRename} />
+            ) : null}
           </>
         ) : null}
         <MenuItem

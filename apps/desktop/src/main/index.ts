@@ -63,7 +63,7 @@ function createWindow(): void {
   })
 
   const useWebUi =
-    process.env.DESKTOP_USE_WEB_UI !== 'false' && process.env.DESKTOP_USE_WEB_UI !== '0'
+    process.env.DESKTOP_USE_WEB_UI === 'true' || process.env.DESKTOP_USE_WEB_UI === '1'
   const webOrigin = process.env.WEB_ORIGIN?.trim() || 'http://localhost:5173'
 
   if (useWebUi) {

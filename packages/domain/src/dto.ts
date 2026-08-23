@@ -124,6 +124,12 @@ export interface CopyFilePayload {
   targetFolderId: string
 }
 
+/** TEMP: rename — vault display name (also the v1 file password). */
+export interface RenameFilePayload {
+  fileId: string
+  displayName: string
+}
+
 export interface PasswordFilePayload {
   fileId: string
   password: string
@@ -185,6 +191,8 @@ export interface AdminCreateUserPayload {
   roleCode: string
   /** If true, grants full rights on all category roots. */
   grantAllCategoryRoots?: boolean
+  /** Folders to grant (full use + subfolders). Ignored for Admin. */
+  folderIds?: string[]
 }
 
 export interface AdminSetUserRolesPayload {
@@ -201,6 +209,13 @@ export interface AdminSetFolderAclPayload {
   canCopy: boolean
   canDelete: boolean
   inherit?: boolean
+}
+
+/** Simple checkbox access: these folders (and their subfolders) are open to the user. */
+export interface UserFolderAccessDto {
+  userId: string
+  isAdmin: boolean
+  folderIds: string[]
 }
 
 export interface MyAccessEntryDto {
