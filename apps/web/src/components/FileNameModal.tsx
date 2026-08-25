@@ -1,0 +1,307 @@
+import { useEffect, useRef, useState } from 'react'
+import {
+  ChevronRight,
+  Download,
+  Eye,
+  FileText,
+  Loader2,
+  ScanSearch,
+  SearchX
+} from 'lucide-react'
+
+import type { FileDto, FolderDto } from '@securevault/domain'
+import { api } from '@/api/vault'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/modal'
+import type { ModuleTheme } from '@/theme/modules'
+
+type Phase = 'input' | 'scanning' | 'success' | 'notfound'
+
+/** Minimum time the scanning bar stays up so the verify feels deliberate. */
+const SCAN_MIN_MS = 1100
+
+interface FileNameModalProps {
+  open: boolean
+  onClose: () => void
+  folder: FolderDto | null
+  moduleName: string
+  theme: ModuleTheme
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function formatBytes(raw: string): string {
+  const bytes = Number(raw)
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
+  const value = bytes / 1024 ** i
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+/*
+  Name-verified retrieval. A file only "unlocks" when the entered name matches a
+  record in this folder — DOCMAN treats the display name as the file's key. We
+  verify against the real listing endpoint, then View/Download stream through the
+  real download endpoint using the matched name as the per-file password (v1).
+*/
+export function FileNameModal({
+  open,
+  onClose,
+  folder,
+  moduleName,
+  theme
+}: FileNameModalProps): React.JSX.Element {
+  const [phase, setPhase] = useState<Phase>('input')
+  const [name, setName] = useState('')
+  const [match, setMatch] = useState<FileDto | null>(null)
+  const [action, setAction] = useState<'view' | 'download' | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const reqId = useRef(0)
+
+  useEffect(() => {
+    if (!open) return
+    setPhase('input')
+    setName('')
+    setMatch(null)
+    setAction(null)
+    setActionError(null)
+    reqId.current += 1
+  }, [open, folder])
+
+  const accentVars = { '--fm-accent': theme.colorVar } as React.CSSProperties
+  const submitting = phase === 'scanning'
+  const trimmed = name.trim()
+
+  async function handleSubmit(event: React.FormEvent): Promise<void> {
+    event.preventDefault()
+    if (!folder || !trimmed || submitting) return
+    const id = ++reqId.current
+    setPhase('scanning')
+    setActionError(null)
+    try {
+      const [files] = await Promise.all([
+        api.files.listFiles({ folderId: folder.folderId }),
+        sleep(SCAN_MIN_MS)
+      ])
+      if (id !== reqId.current) return
+      const hit =
+        files.find((f) => f.displayName.trim().toLowerCase() === trimmed.toLowerCase()) ?? null
+      if (hit) {
+        setMatch(hit)
+        setPhase('success')
+      } else {
+        setPhase('notfound')
+      }
+    } catch {
+      if (id !== reqId.current) return
+      setPhase('notfound')
+    }
+  }
+
+  function retry(): void {
+    setPhase('input')
+    setMatch(null)
+    setActionError(null)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  async function runAction(kind: 'view' | 'download'): Promise<void> {
+    if (!match || action) return
+    setAction(kind)
+    setActionError(null)
+    try {
+      if (kind === 'view') {
+        await api.files.openFile({ fileId: match.fileId, password: match.displayName })
+      } else {
+        await api.files.downloadFile({ fileId: match.fileId, password: match.displayName })
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Could not open this file.')
+    } finally {
+      setAction(null)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} size="md">
+      <div style={accentVars}>
+        {/* Themed icon + breadcrumb */}
+        <div className="flex items-center gap-3">
+          <div
+            className="flex size-11 shrink-0 items-center justify-center rounded-[var(--sv-radius)] ring-1 ring-inset ring-sv-border"
+            style={{
+              backgroundColor: 'color-mix(in srgb, var(--fm-accent) 16%, transparent)',
+              color: 'var(--fm-accent)'
+            }}
+          >
+            <ScanSearch className="size-5" />
+          </div>
+          <div className="min-w-0">
+            <nav
+              aria-label="Breadcrumb"
+              className="flex items-center gap-1 text-xs text-sv-text-muted"
+            >
+              <span className="truncate">{moduleName}</span>
+              <ChevronRight className="size-3 shrink-0" />
+              <span
+                className="truncate font-medium"
+                style={{ color: 'var(--fm-accent)' }}
+              >
+                {folder?.name ?? 'Folder'}
+              </span>
+            </nav>
+            <h2 className="mt-0.5 text-base font-semibold tracking-tight text-sv-text">
+              Retrieve a file
+            </h2>
+          </div>
+        </div>
+
+        {phase === 'input' || phase === 'scanning' ? (
+          <form onSubmit={handleSubmit} className="mt-5">
+            <label htmlFor="fm-name" className="mb-1.5 block text-sm font-medium text-sv-text">
+              File name
+            </label>
+            <Input
+              id="fm-name"
+              ref={inputRef}
+              autoFocus
+              value={name}
+              disabled={submitting}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter the exact file name"
+            />
+            <p className="mt-1.5 text-xs text-sv-text-muted">
+              Files in this folder unlock only when the name matches the vault record exactly.
+            </p>
+
+            {/* Scanning progress: a moving gradient bar */}
+            <div
+              className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-sv-surface-2"
+              aria-hidden={!submitting}
+            >
+              {submitting ? (
+                <div
+                  className="h-full w-1/3 rounded-full animate-[sv-scan_1.1s_ease-in-out_infinite] motion-reduce:animate-none motion-reduce:w-full"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, transparent, var(--fm-accent), transparent)'
+                  }}
+                />
+              ) : null}
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!trimmed || submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Verifying…
+                  </>
+                ) : (
+                  'Retrieve'
+                )}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {phase === 'success' && match ? (
+          <div className="mt-5">
+            <Card variant="paper" className="ring-1 ring-black/5">
+              <div className="flex items-start gap-3 p-4">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-sv-paper-2 text-sv-paper-text-dim">
+                  <FileText className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-sm font-medium text-sv-paper-text">
+                    {match.displayName}
+                  </p>
+                  <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-sv-paper-text-dim">
+                    <div className="flex gap-1">
+                      <dt>Size</dt>
+                      <dd className="font-mono">{formatBytes(match.sizeBytes)}</dd>
+                    </div>
+                    <div className="flex gap-1">
+                      <dt>Modified</dt>
+                      <dd className="font-mono">{formatDate(match.updatedAt)}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+            </Card>
+
+            {actionError ? (
+              <p className="mt-3 text-xs text-sv-danger">{actionError}</p>
+            ) : null}
+
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <Button type="button" variant="ghost" onClick={retry}>
+                Retrieve another
+              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={action !== null}
+                  onClick={() => void runAction('download')}
+                >
+                  {action === 'download' ? <Loader2 className="animate-spin" /> : <Download />}
+                  Download
+                </Button>
+                <Button
+                  type="button"
+                  disabled={action !== null}
+                  onClick={() => void runAction('view')}
+                >
+                  {action === 'view' ? <Loader2 className="animate-spin" /> : <Eye />}
+                  View
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {phase === 'notfound' ? (
+          <div className="mt-5">
+            <div className="flex items-start gap-3 rounded-[var(--sv-radius)] border border-sv-danger/30 bg-sv-danger/10 p-4">
+              <SearchX className="mt-0.5 size-5 shrink-0 text-sv-danger" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-sv-text">No matching file</p>
+                <p className="mt-1 text-sm text-sv-text-muted">
+                  Nothing in <span className="font-medium text-sv-text">{folder?.name}</span> is
+                  named “{trimmed}”. Retrieval needs the exact name — check spelling, spacing, and
+                  capitalisation, then try again.
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="ghost" onClick={onClose}>
+                Close
+              </Button>
+              <Button type="button" onClick={retry}>
+                Try another name
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Modal>
+  )
+}
+
+export default FileNameModal

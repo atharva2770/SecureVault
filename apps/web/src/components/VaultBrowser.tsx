@@ -22,6 +22,8 @@ import {
   Lock,
   Menu,
   MoveRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Scissors,
   Search,
@@ -34,7 +36,9 @@ import type { FileDto, FolderDto } from '@securevault/domain'
 import { EMPTY_RIGHTS } from '@securevault/domain'
 import { api } from '@/api/vault'
 import { useAuth } from '@/auth/AuthProvider'
+import FileNameModal from '@/components/FileNameModal'
 import ModuleGrid, { type ModuleGridItem } from '@/components/ModuleGrid'
+import ModulePage from '@/components/ModulePage'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
 import RenameFileModal from '@/components/RenameFileModal'
@@ -46,6 +50,7 @@ import UploadLockModal, { type PendingUpload } from '@/components/UploadLockModa
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { folderRightsOf, vaultActions } from '@/lib/vault-actions'
+import { moduleThemeForCategory } from '@/theme/modules'
 
 interface FolderNode extends FolderDto {
   children: FolderNode[]
@@ -238,9 +243,11 @@ export default function VaultBrowser(): React.JSX.Element {
   const { isAdmin } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [selection, setSelection] = useState<Selection>({ type: 'root' })
+  const [fileNameFolder, setFileNameFolder] = useState<FolderDto | null>(null)
   const [navHistory, setNavHistory] = useState<Selection[]>([{ type: 'root' }])
   const search = searchParams.get('q') ?? ''
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -893,6 +900,9 @@ export default function VaultBrowser(): React.JSX.Element {
 
   const isEmpty = !isSearching && visibleFolders.length === 0 && visibleFiles.length === 0
   const loading = filesQuery.isLoading || (isSearching && searchAllQuery.isLoading)
+  const isModuleRoot =
+    selection.type === 'folder' && Boolean(selectedFolder?.isCategoryRoot) && !isSearching
+  const moduleTheme = moduleThemeForCategory(selectedFolder?.name)
   const clipboardCount = clipboard?.items.length ?? 0
   const cutFileIds = useMemo(
     () =>
@@ -1008,7 +1018,8 @@ export default function VaultBrowser(): React.JSX.Element {
           className={cn(
             'z-40 flex w-[min(100%,var(--sv-sidebar-width))] shrink-0 flex-col border-r border-sv-border bg-sv-surface',
             'fixed inset-y-0 left-0 top-[var(--sv-header-height)] transition-transform duration-200 md:static md:translate-x-0',
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+            sidebarCollapsed && 'md:hidden'
           )}
           onMouseMove={() => void api.auth.touch()}
         >
@@ -1026,6 +1037,20 @@ export default function VaultBrowser(): React.JSX.Element {
                 aria-label="Open navigation"
               >
                 <Menu className="size-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="hidden size-8 md:inline-flex"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                aria-label={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
+                title={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeftOpen className="size-4" />
+                ) : (
+                  <PanelLeftClose className="size-4" />
+                )}
               </Button>
               <Button
                 size="icon"
@@ -1309,23 +1334,32 @@ export default function VaultBrowser(): React.JSX.Element {
               <p className="p-4 text-sm text-sv-danger">
                 {(filesQuery.error as Error).message || 'Failed to load.'}
               </p>
-            ) : isEmpty ? (
-              <div className="flex h-64 flex-col items-center justify-center gap-2 px-4 text-center">
-                <FolderOpen className="size-12 text-sv-text-muted/50" />
-                <p className="text-sm font-medium text-sv-text">
-                  {selection.type === 'root' ? 'No categories yet' : 'This folder is empty'}
-                </p>
-                <p className="max-w-sm text-xs text-sv-text-muted">
-                  {selection.type === 'root'
-                    ? 'Category folders will appear here once the vault is ready.'
-                    : here.upload
-                      ? 'Upload files, create a folder, or paste with Ctrl+V.'
-                      : here.copy
-                        ? 'You can open and copy files in this folder.'
-                        : 'You can browse files in this folder.'}
-                </p>
-              </div>
             ) : (
+              <>
+                {isModuleRoot ? (
+                  <ModulePage
+                    theme={moduleTheme}
+                    folderName={selectedFolder?.name ?? 'Module'}
+                    subfolders={visibleFolders}
+                    onOpenFolder={openFolder}
+                    onPickFile={(folder) => setFileNameFolder(folder)}
+                    onBackToDashboard={() => navigateTo({ type: 'root' })}
+                  />
+                ) : null}
+
+                {isEmpty && !isModuleRoot ? (
+                  <div className="flex h-64 flex-col items-center justify-center gap-2 px-4 text-center">
+                    <FolderOpen className="size-12 text-sv-text-muted/50" />
+                    <p className="text-sm font-medium text-sv-text">This folder is empty</p>
+                    <p className="max-w-sm text-xs text-sv-text-muted">
+                      {here.upload
+                        ? 'Upload files, create a folder, or paste with Ctrl+V.'
+                        : here.copy
+                          ? 'You can open and copy files in this folder.'
+                          : 'You can browse files in this folder.'}
+                    </p>
+                  </div>
+                ) : isModuleRoot && visibleFiles.length === 0 ? null : (
               <div>
                 {/* Desktop column headers */}
                 <div className="sticky top-0 z-[1] hidden grid-cols-[minmax(180px,2fr)_150px_120px_80px_180px] gap-2 border-b border-sv-border bg-sv-surface/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-sv-text-muted backdrop-blur md:grid">
@@ -1337,7 +1371,8 @@ export default function VaultBrowser(): React.JSX.Element {
                 </div>
 
                 <ul className="space-y-1 p-2 pb-24 md:space-y-0 md:p-0 md:pb-8">
-                  {visibleFolders.map((folder) => {
+                  {!isModuleRoot &&
+                    visibleFolders.map((folder) => {
                     const dropHover = dropTargetFolderId === folder.folderId
                     const rowSelected = selectedFolderRowId === folder.folderId
                     const deletable = !folder.isCategoryRoot && folder.rights.delete
@@ -1575,6 +1610,8 @@ export default function VaultBrowser(): React.JSX.Element {
                   })}
                 </ul>
               </div>
+                )}
+              </>
             )}
           </main>
         </section>
@@ -1697,6 +1734,14 @@ export default function VaultBrowser(): React.JSX.Element {
           }}
         />
       ) : null}
+
+      <FileNameModal
+        open={fileNameFolder !== null}
+        folder={fileNameFolder}
+        moduleName={selectedFolder?.name ?? 'Module'}
+        theme={moduleTheme}
+        onClose={() => setFileNameFolder(null)}
+      />
     </div>
   )
 }

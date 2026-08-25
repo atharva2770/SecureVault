@@ -299,6 +299,17 @@
   }
 }
 
+/* Per-module hero pattern strength — patterns tuned for near-black read too
+   faintly on white, so light mode mixes more of the accent into the pattern.
+   `--card-accent` / `--card-accent-soft` are set inline per module. */
+.module-hero {
+  --card-pattern-strength: 16%;
+}
+
+[data-theme='light'] .module-hero {
+  --card-pattern-strength: 26%;
+}
+
 .titlebar-drag {
   -webkit-app-region: drag;
 }

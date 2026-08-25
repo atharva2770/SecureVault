@@ -13,6 +13,7 @@ import MyAccessPage from '@/pages/MyAccessPage'
 import ProfilePage from '@/pages/ProfilePage'
 import SettingsPage from '@/pages/SettingsPage'
 import VaultPage from '@/pages/VaultPage'
+import { ToastProvider } from '@/components/ui/toast'
 import { ThemeProvider } from '@/theme/ThemeProvider'
 
 const queryClient = new QueryClient({
@@ -41,6 +42,7 @@ export default function App(): React.JSX.Element {
     <QueryClientProvider client={queryClient}>
       <QueryReset />
       <ThemeProvider>
+        <ToastProvider>
         <BrowserRouter>
           <AuthProvider>
             <div className="h-full">
@@ -69,7 +71,11 @@ export default function App(): React.JSX.Element {
                   />
                   <Route
                     path="/admin/rights"
-                    element={<Navigate to="/admin/users" replace />}
+                    element={
+                      <RequireAdmin>
+                        <UsersPage />
+                      </RequireAdmin>
+                    }
                   />
                   <Route
                     path="/admin/folders"
@@ -81,6 +87,7 @@ export default function App(): React.JSX.Element {
             </div>
           </AuthProvider>
         </BrowserRouter>
+        </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )
