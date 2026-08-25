@@ -109,13 +109,16 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     try {
       const session = requireSession(request)
       const { fileId } = request.params as { fileId: string }
-      const body = (request.body ?? {}) as { password?: string }
+      const body = (request.body ?? {}) as { password?: string; intent?: string }
       const password = body.password?.trim() ?? ''
       if (!password) {
         throw new HttpError(400, 'File password is required.')
       }
 
-      const downloaded = await vault.downloadToTemp(session.userId, fileId, password)
+      const downloaded = await vault.downloadToTemp(session.userId, fileId, password, {
+        kek: session.kek,
+        intent: body.intent === 'download' ? 'copy' : 'view'
+      })
       tempPath = downloaded.tempPath
       const name = downloadFileName(downloaded.displayName, downloaded.originalFileName)
 

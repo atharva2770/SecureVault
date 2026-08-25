@@ -49,7 +49,7 @@ type AclRow = {
 }
 
 /**
- * Single authz engine for desktop today and the future web API.
+ * Single authz engine for the web API.
  * Deny-by-default. Admin bypasses folder ACL. Viewer role caps at VIEW.
  * Effective rights are computed by {@link resolveFolderRightsPure} — do not re-implement.
  */

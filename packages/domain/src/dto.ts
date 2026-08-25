@@ -1,5 +1,5 @@
 /**
- * Transport-agnostic DTOs shared by desktop IPC and the future HTTP API.
+ * Transport-agnostic DTOs shared by the HTTP API and web UI.
  * Keep secrets (KEK/DEK) out of these payloads — never send key material to a client.
  */
 
@@ -145,7 +145,7 @@ export interface GetFileResult {
   originalFileName: string
   mimeType: string | null
   checksum: string
-  /** Temporary plaintext path in OS temp — delete after use (desktop). */
+  /** Temporary plaintext path on the API host — delete after streaming to the browser. */
   tempPath: string
 }
 

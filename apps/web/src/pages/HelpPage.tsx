@@ -21,7 +21,9 @@ export default function HelpPage(): React.JSX.Element {
           <p className="text-sm leading-6 text-sv-text-muted">
             When you upload, the display name is also the per-file access password (v1 policy). You
             must enter that password again to open or download. Encryption and decryption happen on
-            the server; the browser never receives DEKs.
+            the server; the browser never receives keys. Files must be uploaded through this web
+            app — files left over from the old desktop app cannot be opened and should be uploaded
+            again.
           </p>
         </section>
         <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5">

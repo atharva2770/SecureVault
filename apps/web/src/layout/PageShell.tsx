@@ -18,8 +18,8 @@ export default function PageShell({
   wide = false
 }: PageShellProps): React.JSX.Element {
   return (
-    <div className="h-full overflow-y-auto">
-      <div className={cn('mx-auto px-4 py-6 sm:px-6', wide ? 'max-w-6xl' : 'max-w-5xl')}>
+    <div className="h-full overflow-y-auto [overflow-anchor:none]">
+      <div className={cn('mx-auto w-full px-4 py-6 sm:px-6', wide ? 'max-w-6xl' : 'max-w-5xl')}>
         <div className="mb-6">
           <Button asChild size="sm" variant="ghost" className="-ml-2 mb-3 h-8 gap-1.5">
             <Link to="/">

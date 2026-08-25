@@ -32,7 +32,7 @@ export interface AuthCredentialResult {
 }
 
 /**
- * Credential verification shared by desktop (VaultSession) and the web API (HTTP session).
+ * Credential verification for the web API HTTP session.
  * Does not hold a process-wide unlocked vault.
  */
 export class AuthCredentials {
@@ -96,6 +96,9 @@ export class AuthCredentials {
       )
 
       if (isFirstUser) {
+        await this.db.prisma.folder.updateMany({
+          data: { userId: user.userId }
+        })
         await this.rbac.grantFullAccessOnCategoryRoots(user.userId, user.userId)
       }
 

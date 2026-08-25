@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Menu, Minus, Search, Shield, Square, X } from 'lucide-react'
+import { Menu, Search, Shield } from 'lucide-react'
 
 import { useAuth } from '@/auth/AuthProvider'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -12,10 +12,6 @@ interface AppHeaderProps {
   onOpenSidebar?: () => void
 }
 
-function hasElectronWindow(): boolean {
-  return typeof window !== 'undefined' && typeof window.api?.window?.minimize === 'function'
-}
-
 export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.Element {
   const { user } = useAuth()
   const location = useLocation()
@@ -23,7 +19,6 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
   const [params, setParams] = useSearchParams()
   const [menuOpen, setMenuOpen] = useState(false)
   const [query, setQuery] = useState(params.get('q') ?? '')
-  const electron = hasElectronWindow()
   const showSearch = location.pathname === '/'
 
   useEffect(() => {
@@ -40,13 +35,8 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
   }
 
   return (
-    <header
-      className={cn(
-        'relative z-40 flex h-[var(--sv-header-height)] shrink-0 items-center gap-2 border-b border-sv-border bg-sv-surface px-2 sm:gap-3 sm:px-3',
-        electron && 'titlebar-drag'
-      )}
-    >
-      <div className="titlebar-no-drag flex min-w-0 items-center gap-1 sm:gap-2">
+    <header className="relative z-40 flex h-[var(--sv-header-height)] shrink-0 items-center gap-2 border-b border-sv-border bg-sv-surface px-2 sm:gap-3 sm:px-3">
+      <div className="flex min-w-0 items-center gap-1 sm:gap-2">
         {onOpenSidebar ? (
           <Button
             size="icon"
@@ -69,7 +59,7 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
         </Link>
       </div>
 
-      <div className="titlebar-no-drag flex min-w-0 flex-1 justify-center">
+      <div className="flex min-w-0 flex-1 justify-center">
         {showSearch ? (
           <form onSubmit={submitSearch} className="flex w-full max-w-xl items-center gap-2">
             <div className="relative min-w-0 flex-1">
@@ -103,7 +93,7 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
         )}
       </div>
 
-      <div className="titlebar-no-drag relative flex items-center gap-1">
+      <div className="relative flex items-center gap-1">
         {user ? (
           <button
             type="button"
@@ -120,38 +110,6 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
         ) : null}
 
         <ProfileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
-
-        {electron ? (
-          <div className="ml-1 hidden items-center sm:flex">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={() => window.api?.window?.minimize()}
-              aria-label="Minimize"
-            >
-              <Minus className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={() => window.api?.window?.maximize()}
-              aria-label="Maximize"
-            >
-              <Square className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 hover:bg-destructive hover:text-white"
-              onClick={() => window.api?.window?.close()}
-              aria-label="Close"
-            >
-              <X className="size-4" />
-            </Button>
-          </div>
-        ) : null}
       </div>
     </header>
   )

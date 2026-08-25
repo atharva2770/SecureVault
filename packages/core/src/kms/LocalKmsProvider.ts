@@ -3,7 +3,7 @@ import type { KeyWrappingProvider } from './KeyWrappingProvider'
 
 /**
  * Local stand-in for a cloud KMS: one 32-byte wrapping key from env.
- * DEKs are wrapped with AES-256-GCM (same wire format as desktop wrapKey).
+ * DEKs are wrapped with AES-256-GCM.
  */
 export class LocalKmsProvider implements KeyWrappingProvider {
   readonly kind = 'local-kms'

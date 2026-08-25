@@ -32,7 +32,9 @@ export function toHttpError(error: unknown): HttpError {
     lower.includes('invalid') ||
     lower.includes('incorrect') ||
     lower.includes('disabled') ||
-    lower.includes('cannot be streamed') ||
+    lower.includes('cannot decrypt') ||
+    lower.includes('old desktop app') ||
+    lower.includes('was not found on this machine') ||
     lower.includes('too long')
   ) {
     return new HttpError(400, message)

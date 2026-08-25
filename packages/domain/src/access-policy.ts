@@ -1,7 +1,6 @@
 /**
- * Pure access-policy helpers for Electron main today and the future web API.
- * Keep enforcement in AccessControlService (desktop) / API middleware (web);
- * do not re-implement in any renderer or browser UI.
+ * Pure access-policy helpers for the web API.
+ * Keep enforcement in AccessControlService; do not re-implement in the browser UI.
  *
  * Effective rights (summary):
  * - Deny by default

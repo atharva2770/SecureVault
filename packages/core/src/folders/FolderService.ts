@@ -6,7 +6,7 @@ import { DBService } from '@securevault/db'
 /**
  * Category catalog + shared sidebar folder trees.
  * Visibility is ACL-driven (AccessControlService), not folder UserId.
- * Caller (desktop IPC or future API) must pass the acting userId.
+ * Caller (the HTTP API) must pass the acting userId.
  */
 export class FolderService {
   private static instance: FolderService | null = null

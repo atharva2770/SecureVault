@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
-import { mkdir, unlink } from 'node:fs/promises'
+import { copyFile, mkdir, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import type { Readable } from 'node:stream'
@@ -12,7 +12,9 @@ import { AccessControlService } from '../access/AccessControlService'
 import { AuditAction, AuditService } from '../audit/AuditService'
 import type { BlobStore } from '../blobs/BlobStore'
 import { isWebBlobUri, WEB_FILE_SOURCE } from '../blobs/blobUri'
+import { resolveCiphertextPath } from '../blobs/vaultPaths'
 import { CryptoService } from '../crypto/CryptoService'
+import { unwrapFileDek } from '../crypto/unwrapFileDek'
 import { FolderService } from '../folders/FolderService'
 import type { KeyWrappingProvider } from '../kms/KeyWrappingProvider'
 import { secureZero } from '../utils/secure'
@@ -39,7 +41,6 @@ export interface VaultDownloadResult {
 
 /**
  * Web-vault file lifecycle: stream encrypt into BlobStore, wrap DEKs with KMS.
- * Does not use the user's password-derived KEK (that stays on the desktop).
  */
 export class VaultFileService {
   private readonly db = DBService.getInstance()
@@ -146,16 +147,15 @@ export class VaultFileService {
   async downloadToTemp(
     userId: string,
     fileId: string,
-    password: string
+    password: string,
+    options?: { kek?: Buffer | null; intent?: 'view' | 'copy' }
   ): Promise<VaultDownloadResult> {
-    await this.acl.requireFile(fileId, 'copy', userId)
-    const record = await this.requireWebFile(fileId)
+    const right = options?.intent === 'copy' ? 'copy' : 'view'
+    await this.acl.requireFile(fileId, right, userId)
+    const record = await this.requireAccessibleFile(fileId)
     await this.assertFilePassword(record.accessPasswordHash, password)
 
-    const key = this.blobs.parseUri(record.storedBlobPath)
-    if (!key) {
-      throw new Error('File blob is not stored on the web vault.')
-    }
+    const encPath = await resolveCiphertextPath(record.storedBlobPath, this.blobs)
 
     let dek: Buffer | null = null
     const tempDir = join(tmpdir(), 'securevault-web-decrypt', userId)
@@ -167,8 +167,12 @@ export class VaultFileService {
     )
 
     try {
-      dek = Buffer.from(await this.kms.unwrapDek(Buffer.from(record.wrappedDEK)))
-      const encPath = await this.blobs.resolveReadPath(key)
+      dek = await unwrapFileDek(
+        Buffer.from(record.wrappedDEK),
+        this.kms,
+        options?.kek,
+        record.source !== WEB_FILE_SOURCE || !isWebBlobUri(record.storedBlobPath)
+      )
       await this.crypto.decryptToWritable(
         encPath,
         dek,
@@ -177,6 +181,8 @@ export class VaultFileService {
         record.checksum,
         createWriteStream(tempPath)
       )
+
+      await this.promoteToSharedStore(record, encPath, dek).catch(() => undefined)
 
       await this.audit.write({
         action: AuditAction.FILE_OPEN,
@@ -281,7 +287,7 @@ export class VaultFileService {
     if (!fileId) throw new Error('fileId is required.')
     if (!targetFolderId) throw new Error('Target folder is required.')
 
-    const existing = await this.requireWebFile(fileId)
+    const existing = await this.requireAccessibleFile(fileId)
     if (!existing.folderId) throw new Error('File has no folder; cannot copy.')
     if (!existing.categoryId) throw new Error('File has no category; cannot copy.')
 
@@ -299,17 +305,14 @@ export class VaultFileService {
       throw new Error('Destination folder not found in this category.')
     }
 
-    const fromKey = this.blobs.parseUri(existing.storedBlobPath)
-    if (!fromKey) {
-      throw new Error('File blob is not stored on the web vault.')
-    }
-
+    const fromPath = await resolveCiphertextPath(existing.storedBlobPath, this.blobs)
     const newFileId = randomUUID()
     const toKey = this.blobs.objectKey(userId, newFileId)
+    const toPath = await this.blobs.prepareWrite(toKey)
     let blobWritten = false
 
     try {
-      await this.blobs.copy(fromKey, toKey)
+      await copyFile(fromPath, toPath)
       blobWritten = true
 
       const displayName = await this.uniqueCopyName(target.folderId, existing.displayName)
@@ -429,14 +432,32 @@ export class VaultFileService {
     return record
   }
 
-  private async requireWebFile(fileId: string) {
-    const record = await this.requireAccessibleFile(fileId)
-    if (!isWebBlobUri(record.storedBlobPath)) {
-      throw new Error(
-        'This file is stored on a desktop vault and cannot be streamed from the web API.'
-      )
+  /**
+   * If this file is not yet in the shared blob store, copy it in and re-wrap the DEK with KMS.
+   */
+  private async promoteToSharedStore(
+    record: { fileId: string; userId: string; storedBlobPath: string },
+    encPath: string,
+    dek: Buffer
+  ): Promise<void> {
+    if (isWebBlobUri(record.storedBlobPath)) return
+
+    const key = this.blobs.objectKey(record.userId, record.fileId)
+    const dest = await this.blobs.prepareWrite(key)
+    if (dest !== encPath) {
+      await copyFile(encPath, dest)
     }
-    return record
+
+    const wrappedDEK = Buffer.from(await this.kms.wrapDek(dek))
+    await this.db.prisma.file.update({
+      where: { fileId: record.fileId },
+      data: {
+        storedBlobPath: this.blobs.toUri(key),
+        wrappedDEK: new Uint8Array(wrappedDEK),
+        source: WEB_FILE_SOURCE,
+        updatedAt: new Date()
+      }
+    })
   }
 
   private async assertFilePassword(

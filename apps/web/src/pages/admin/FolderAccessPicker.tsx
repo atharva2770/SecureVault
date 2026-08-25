@@ -38,6 +38,21 @@ function buildTree(folders: FolderDto[]): FolderNode[] {
   return roots.sort((a, b) => a.name.localeCompare(b.name))
 }
 
+function flattenVisible(
+  nodes: FolderNode[],
+  collapsed: ReadonlySet<string>,
+  depth = 0
+): { node: FolderNode; depth: number }[] {
+  const rows: { node: FolderNode; depth: number }[] = []
+  for (const node of nodes) {
+    rows.push({ node, depth })
+    if (node.children.length > 0 && !collapsed.has(node.folderId)) {
+      rows.push(...flattenVisible(node.children, collapsed, depth + 1))
+    }
+  }
+  return rows
+}
+
 function grantsById(grants: FolderGrantDto[]): Map<string, FolderGrantDto> {
   return new Map(grants.map((g) => [g.folderId, g]))
 }
@@ -62,131 +77,37 @@ function RightsCheck({
   onChange: (next: boolean) => void
 }): React.JSX.Element {
   return (
-    <label className="inline-flex cursor-pointer items-center justify-center" title={label}>
+    <label
+      className={cn(
+        'relative mx-auto flex size-8 items-center justify-center',
+        disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+      )}
+      title={label}
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        aria-label={label}
+        className="peer absolute inset-0 z-10 m-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        onChange={(event) => onChange(event.target.checked)}
+      />
       <span
+        aria-hidden
         className={cn(
-          'flex size-5 items-center justify-center rounded-md border transition-colors',
+          'pointer-events-none flex size-5 items-center justify-center rounded-md border transition-colors',
+          'peer-focus-visible:ring-2 peer-focus-visible:ring-sv-accent/70 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-sv-surface',
           disabled && 'opacity-40',
-          checked ? 'border-sv-accent bg-sv-accent text-white' : 'border-sv-border bg-sv-bg text-transparent'
+          checked
+            ? 'border-sv-accent bg-sv-accent text-white'
+            : 'border-sv-border bg-sv-bg text-transparent'
         )}
       >
         <Check className="size-3.5" strokeWidth={3} />
       </span>
-      <input
-        type="checkbox"
-        className="sr-only"
-        checked={checked}
-        disabled={disabled}
-        aria-label={label}
-        onChange={(e) => onChange(e.target.checked)}
-      />
     </label>
   )
 }
-
-const FolderRow = memo(function FolderRow({
-  node,
-  depth,
-  byId,
-  disabled,
-  lockedAll,
-  onPatch
-}: {
-  node: FolderNode
-  depth: number
-  byId: Map<string, FolderGrantDto>
-  disabled: boolean
-  lockedAll: boolean
-  onPatch: (folderId: string, patch: Partial<FolderGrantDto>) => void
-}): React.JSX.Element {
-  const [open, setOpen] = useState(true)
-  const grant = byId.get(node.folderId)
-  const view = lockedAll || Boolean(grant?.canView)
-  const edit = lockedAll || Boolean(grant?.canEdit)
-  const copy = lockedAll || Boolean(grant?.canCopy)
-  const del = lockedAll || Boolean(grant?.canDelete)
-  const inherit = lockedAll || (grant ? grant.inherit : false)
-  const locked = disabled || lockedAll
-
-  return (
-    <div>
-      <div
-        className={cn(
-          'grid min-h-10 items-center gap-2 rounded-lg py-1.5 pr-2 transition-colors',
-          'grid-cols-[minmax(0,1fr)_repeat(5,minmax(3.25rem,auto))]',
-          view && !lockedAll && 'bg-sv-accent/10'
-        )}
-      >
-        <div className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: 8 + depth * 16 }}>
-          {node.children.length > 0 ? (
-            <button
-              type="button"
-              className="inline-flex size-5 shrink-0 items-center justify-center text-sv-text-muted"
-              onClick={() => setOpen((v) => !v)}
-              aria-label={open ? 'Collapse' : 'Expand'}
-            >
-              <ChevronRight className={cn('size-3.5 transition-transform', open && 'rotate-90')} />
-            </button>
-          ) : (
-            <span className="size-5 shrink-0" />
-          )}
-          <Folder className={cn('size-4 shrink-0', view ? 'text-sv-accent' : 'text-sv-text-muted')} />
-          <span className="truncate text-sm text-sv-text">{node.name}</span>
-        </div>
-        <RightsCheck
-          checked={view}
-          disabled={locked}
-          label="View"
-          onChange={(next) =>
-            onPatch(
-              node.folderId,
-              next
-                ? { canView: true, inherit: grant?.inherit ?? true }
-                : { canView: false, canEdit: false, canCopy: false, canDelete: false }
-            )
-          }
-        />
-        <RightsCheck
-          checked={edit}
-          disabled={locked}
-          label="Edit"
-          onChange={(next) => onPatch(node.folderId, { canView: true, canEdit: next })}
-        />
-        <RightsCheck
-          checked={copy}
-          disabled={locked}
-          label="Copy"
-          onChange={(next) => onPatch(node.folderId, { canView: true, canCopy: next })}
-        />
-        <RightsCheck
-          checked={del}
-          disabled={locked}
-          label="Delete"
-          onChange={(next) => onPatch(node.folderId, { canView: true, canDelete: next })}
-        />
-        <RightsCheck
-          checked={inherit}
-          disabled={locked || !view}
-          label="Subfolders"
-          onChange={(next) => onPatch(node.folderId, { canView: true, inherit: next })}
-        />
-      </div>
-      {open
-        ? node.children.map((child) => (
-            <FolderRow
-              key={child.folderId}
-              node={child}
-              depth={depth + 1}
-              byId={byId}
-              disabled={disabled}
-              lockedAll={lockedAll}
-              onPatch={onPatch}
-            />
-          ))
-        : null}
-    </div>
-  )
-})
 
 interface FolderAccessPickerProps {
   folders: FolderDto[]
@@ -205,6 +126,10 @@ function FolderAccessPicker({
 }: FolderAccessPickerProps): React.JSX.Element {
   const tree = useMemo(() => buildTree(folders), [folders])
   const byId = useMemo(() => grantsById(grants), [grants])
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
+
+  const rows = useMemo(() => flattenVisible(tree, collapsed), [tree, collapsed])
+  const rootIds = useMemo(() => tree.map((n) => n.folderId), [tree])
 
   const patch = useCallback(
     (folderId: string, next: Partial<FolderGrantDto>) => {
@@ -222,7 +147,14 @@ function FolderAccessPicker({
     [byId, grants, onChange]
   )
 
-  const rootIds = useMemo(() => tree.map((n) => n.folderId), [tree])
+  const toggleCollapsed = useCallback((folderId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId)
+      else next.add(folderId)
+      return next
+    })
+  }, [])
 
   return (
     <div className="space-y-3">
@@ -244,32 +176,145 @@ function FolderAccessPicker({
           Clear all
         </button>
       </div>
-      <div className="max-h-[min(480px,55vh)] overflow-auto rounded-xl border border-sv-border bg-sv-bg/40">
-        <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_repeat(5,minmax(3.25rem,auto))] items-center gap-2 border-b border-sv-border bg-sv-surface px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-sv-text-muted">
-          <span className="pl-2">Folder</span>
-          {COLUMNS.map((col) => (
-            <span key={col.key} className="text-center" title={col.title}>
-              {col.label}
-            </span>
-          ))}
-        </div>
-        <div className="p-1.5">
-          {tree.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-sv-text-muted">No folders yet.</p>
-          ) : (
-            tree.map((node) => (
-              <FolderRow
-                key={node.folderId}
-                node={node}
-                depth={0}
-                byId={byId}
-                disabled={disabled}
-                lockedAll={lockedAll}
-                onPatch={patch}
-              />
-            ))
-          )}
-        </div>
+      <div className="rounded-xl border border-sv-border bg-sv-bg/40 [overflow-anchor:none]">
+        <table className="w-full border-separate border-spacing-0">
+          <caption className="sr-only">
+            Folder access rights. View, Edit, Copy, Delete, and whether rights inherit to
+            subfolders.
+          </caption>
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-sv-surface text-[10px] font-semibold uppercase tracking-wide text-sv-text-muted">
+              <th scope="col" className="border-b border-sv-border px-3 py-2 text-left font-semibold">
+                Folder
+              </th>
+              {COLUMNS.map((col) => (
+                <th
+                  key={col.key}
+                  scope="col"
+                  title={col.title}
+                  className="border-b border-sv-border px-1 py-2 text-center font-semibold"
+                  style={{ width: '4.25rem' }}
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-sv-text-muted">
+                  No folders yet.
+                </td>
+              </tr>
+            ) : (
+              rows.map(({ node, depth }) => {
+                const grant = byId.get(node.folderId)
+                const view = lockedAll || Boolean(grant?.canView)
+                const edit = lockedAll || Boolean(grant?.canEdit)
+                const copy = lockedAll || Boolean(grant?.canCopy)
+                const del = lockedAll || Boolean(grant?.canDelete)
+                const inherit = lockedAll || (grant ? grant.inherit : false)
+                const locked = disabled || lockedAll
+                const hasChildren = node.children.length > 0
+                const isOpen = !collapsed.has(node.folderId)
+
+                return (
+                  <tr
+                    key={node.folderId}
+                    className={cn(view && !lockedAll && 'bg-sv-accent/10')}
+                  >
+                    <th
+                      scope="row"
+                      className="border-b border-sv-border/60 py-1 pr-2 text-left font-normal"
+                    >
+                      <div
+                        className="flex min-w-0 items-center gap-1.5"
+                        style={{ paddingLeft: 8 + depth * 16 }}
+                      >
+                        {hasChildren ? (
+                          <button
+                            type="button"
+                            className="inline-flex size-5 shrink-0 items-center justify-center text-sv-text-muted"
+                            aria-expanded={isOpen}
+                            aria-label={isOpen ? `Collapse ${node.name}` : `Expand ${node.name}`}
+                            onClick={() => toggleCollapsed(node.folderId)}
+                          >
+                            <ChevronRight
+                              className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')}
+                            />
+                          </button>
+                        ) : (
+                          <span className="size-5 shrink-0" />
+                        )}
+                        <Folder
+                          className={cn(
+                            'size-4 shrink-0',
+                            view ? 'text-sv-accent' : 'text-sv-text-muted'
+                          )}
+                          aria-hidden
+                        />
+                        <span className="truncate text-sm font-medium text-sv-text">{node.name}</span>
+                      </div>
+                    </th>
+                    <td className="border-b border-sv-border/60">
+                      <RightsCheck
+                        checked={view}
+                        disabled={locked}
+                        label={`View — ${node.name}`}
+                        onChange={(next) =>
+                          patch(
+                            node.folderId,
+                            next
+                              ? { canView: true, inherit: grant?.inherit ?? true }
+                              : {
+                                  canView: false,
+                                  canEdit: false,
+                                  canCopy: false,
+                                  canDelete: false
+                                }
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="border-b border-sv-border/60">
+                      <RightsCheck
+                        checked={edit}
+                        disabled={locked}
+                        label={`Edit — ${node.name}`}
+                        onChange={(next) => patch(node.folderId, { canView: true, canEdit: next })}
+                      />
+                    </td>
+                    <td className="border-b border-sv-border/60">
+                      <RightsCheck
+                        checked={copy}
+                        disabled={locked}
+                        label={`Copy — ${node.name}`}
+                        onChange={(next) => patch(node.folderId, { canView: true, canCopy: next })}
+                      />
+                    </td>
+                    <td className="border-b border-sv-border/60">
+                      <RightsCheck
+                        checked={del}
+                        disabled={locked}
+                        label={`Delete — ${node.name}`}
+                        onChange={(next) => patch(node.folderId, { canView: true, canDelete: next })}
+                      />
+                    </td>
+                    <td className="border-b border-sv-border/60">
+                      <RightsCheck
+                        checked={inherit}
+                        disabled={locked || !view}
+                        label={`Subfolders inherit — ${node.name}`}
+                        onChange={(next) => patch(node.folderId, { canView: true, inherit: next })}
+                      />
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )

@@ -59,7 +59,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           userId: result.user.userId,
           username: result.user.username,
           role: result.user.role,
-          roles: result.roles
+          roles: result.roles,
+          kek: result.kek
         })
         setSessionCookie(reply, session.sessionId)
         const user = credentials.toUserDto(result.user, result.roles)
@@ -84,7 +85,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           userId: result.user.userId,
           username: result.user.username,
           role: result.user.role,
-          roles: result.roles
+          roles: result.roles,
+          kek: result.kek
         })
         setSessionCookie(reply, session.sessionId)
         const user = credentials.toUserDto(result.user, result.roles)
@@ -132,6 +134,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         body.currentPassword ?? '',
         body.newPassword ?? ''
       )
+      httpSessions.replaceKek(readSessionId(request), result.kek)
       secureZero(result.kek)
       return { ok: true }
     } catch (error) {

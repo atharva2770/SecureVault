@@ -4,7 +4,7 @@ import { DBService } from '@securevault/db'
 import { AccessControlService } from '../access/AccessControlService'
 
 /**
- * JSON file listing (no blob encrypt/decrypt). Shared by desktop and the web API.
+ * JSON file listing (no blob encrypt/decrypt) for the web API.
  */
 export class FileQueryService {
   private static instance: FileQueryService | null = null

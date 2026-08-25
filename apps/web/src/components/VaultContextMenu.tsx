@@ -22,6 +22,11 @@ export interface VaultContextMenuState {
 interface VaultContextMenuProps {
   state: VaultContextMenuState
   canPaste: boolean
+  allowCut?: boolean
+  allowCopy?: boolean
+  allowRename?: boolean
+  allowPaste?: boolean
+  allowDelete?: boolean
   onClose: () => void
   onCut: () => void
   onCopy: () => void
@@ -70,17 +75,31 @@ function MenuItem({
 export default function VaultContextMenu({
   state,
   canPaste,
+  allowCut = false,
+  allowCopy = false,
+  allowRename = false,
+  allowPaste = false,
+  allowDelete = false,
   onClose,
   onCut,
   onCopy,
   onPaste,
   onDelete,
   onRename
-}: VaultContextMenuProps): React.JSX.Element {
+}: VaultContextMenuProps): React.JSX.Element | null {
   const isFile = state.target.kind === 'file'
-  const canDelete =
-    state.target.kind === 'file' ||
-    (state.target.kind === 'folder' && state.target.deletable)
+  const showCut = isFile && allowCut
+  const showCopy = isFile && allowCopy
+  const showRename = isFile && allowRename && Boolean(onRename)
+  const showPaste = allowPaste
+  const showDelete =
+    allowDelete &&
+    (state.target.kind === 'file' ||
+      (state.target.kind === 'folder' && state.target.deletable))
+
+  if (!showCut && !showCopy && !showRename && !showPaste && !showDelete) {
+    return null
+  }
 
   return (
     <>
@@ -102,29 +121,36 @@ export default function VaultContextMenu({
         }}
         role="menu"
       >
-        {isFile ? (
+        {showCut ? (
+          <MenuItem label="Cut" icon={<Scissors className="size-3.5" />} onClick={onCut} />
+        ) : null}
+        {showCopy ? (
+          <MenuItem label="Copy" icon={<Copy className="size-3.5" />} onClick={onCopy} />
+        ) : null}
+        {showRename && onRename ? (
+          <MenuItem label="Rename" icon={<Pencil className="size-3.5" />} onClick={onRename} />
+        ) : null}
+        {showPaste ? (
+          <MenuItem
+            label="Paste"
+            icon={<ClipboardPaste className="size-3.5" />}
+            disabled={!canPaste}
+            onClick={onPaste}
+          />
+        ) : null}
+        {showDelete ? (
           <>
-            <MenuItem label="Cut" icon={<Scissors className="size-3.5" />} onClick={onCut} />
-            <MenuItem label="Copy" icon={<Copy className="size-3.5" />} onClick={onCopy} />
-            {onRename ? (
-              <MenuItem label="Rename" icon={<Pencil className="size-3.5" />} onClick={onRename} />
-            ) : null}
+            {(showCut || showCopy || showRename || showPaste) && (
+              <div className="my-1 border-t border-sv-border" />
+            )}
+            <MenuItem
+              label="Delete"
+              icon={<Trash2 className="size-3.5" />}
+              danger
+              onClick={onDelete}
+            />
           </>
         ) : null}
-        <MenuItem
-          label="Paste"
-          icon={<ClipboardPaste className="size-3.5" />}
-          disabled={!canPaste}
-          onClick={onPaste}
-        />
-        <div className="my-1 border-t border-sv-border" />
-        <MenuItem
-          label="Delete"
-          icon={<Trash2 className="size-3.5" />}
-          disabled={!canDelete}
-          danger
-          onClick={onDelete}
-        />
       </div>
     </>
   )

@@ -4,7 +4,7 @@ import { config } from 'dotenv'
 
 /**
  * Loads the workspace `.env` from the repo root or the current working directory.
- * Works when Prisma runs from `packages/db` and when Electron runs from `apps/desktop`.
+ * Works when Prisma runs from `packages/db` or the API runs from `apps/api`.
  */
 export function loadWorkspaceEnv(): void {
   const candidates = [

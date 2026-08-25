@@ -70,7 +70,7 @@ Desktop.ini
 .windsurf/
 skills-lock.json
 
-# Electron / auto-update local cache
+# Local updater cache
 securevault-updater/
 
 # Prisma generated output (client lives under node_modules; keep migrations tracked)

@@ -12,7 +12,7 @@ import {
 } from './blobUri'
 
 /**
- * Encrypted blobs on local disk. Same SQL metadata as desktop; different wrapping key.
+ * Encrypted blobs on local disk. DEKs are wrapped with VAULT_KMS_WRAP_KEY.
  */
 export class LocalBlobStore implements BlobStore {
   readonly adapter = LOCAL_BLOB_ADAPTER

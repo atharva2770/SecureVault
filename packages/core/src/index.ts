@@ -36,6 +36,8 @@ export {
 } from './blobs/blobUri'
 export type { BlobStore } from './blobs/BlobStore'
 export { LocalBlobStore } from './blobs/LocalBlobStore'
+export { resolveVaultBlobRoot, resolveCiphertextPath } from './blobs/vaultPaths'
+export { unwrapFileDek } from './crypto/unwrapFileDek'
 
 export type { KeyWrappingProvider } from './kms/KeyWrappingProvider'
 export { LocalKmsProvider } from './kms/LocalKmsProvider'

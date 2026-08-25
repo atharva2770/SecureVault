@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 
 import type { FileDto, FolderDto } from '@securevault/domain'
+import { EMPTY_RIGHTS } from '@securevault/domain'
 import { api } from '@/api/vault'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
@@ -42,6 +43,7 @@ import VaultContextMenu, {
 import UploadLockModal, { type PendingUpload } from '@/components/UploadLockModal'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { folderRightsOf, vaultActions } from '@/lib/vault-actions'
 
 interface FolderNode extends FolderDto {
   children: FolderNode[]
@@ -482,18 +484,30 @@ export default function VaultBrowser(): React.JSX.Element {
     return map
   }, [visibleFiles, filesQuery.data, searchAllQuery.data])
 
+  const here = vaultActions(selectedFolder?.rights ?? EMPTY_RIGHTS)
   const canCreateSubfolder =
-    selection.type === 'folder' &&
-    Boolean(selectedFolder?.categoryId) &&
-    Boolean(selectedFolder?.rights.edit)
-  const canUploadHere =
-    selection.type === 'folder' ? Boolean(selectedFolder?.rights.edit) : true
+    selection.type === 'folder' && Boolean(selectedFolder?.categoryId) && here.newFolder
+  const canUploadHere = selection.type === 'folder' && here.upload
   const canPasteHere =
-    selection.type === 'folder' &&
-    Boolean(clipboard?.items.length) &&
-    Boolean(selectedFolder?.rights.edit)
-  const canDeleteHere = Boolean(selectedFolder?.rights.delete)
-  const canCopyHere = Boolean(selectedFolder?.rights.copy)
+    selection.type === 'folder' && Boolean(clipboard?.items.length) && here.paste
+  const canCopyHere = here.copy
+  const canCutHere = here.cut
+
+  function actionsForFile(file: FileDto) {
+    return vaultActions(folderRightsOf(folders, file.folderId))
+  }
+
+  function selectedFilesHave(flag: 'copy' | 'cut' | 'delete' | 'rename'): boolean {
+    if (!selectedFileIds.length) return false
+    return selectedFileIds.every((id) => {
+      const file = fileById.get(id)
+      if (!file) return false
+      const acts = actionsForFile(file)
+      if (flag === 'copy') return acts.copy
+      if (flag === 'cut' || flag === 'delete') return acts.delete
+      return acts.rename
+    })
+  }
 
   const parentOfCurrent =
     selectedFolder?.parentFolderId != null
@@ -636,7 +650,7 @@ export default function VaultBrowser(): React.JSX.Element {
 
   function deleteSelectedFolder(folderId: string): void {
     const folder = folders.find((f) => f.folderId === folderId)
-    if (!folder || folder.isCategoryRoot) return
+    if (!folder || folder.isCategoryRoot || !folder.rights.delete) return
     const ok = window.confirm(
       `Delete folder “${folder.name}”?\n\nThis removes it from the vault. The folder must be empty.`
     )
@@ -645,6 +659,14 @@ export default function VaultBrowser(): React.JSX.Element {
 
   function deleteSelectedFiles(fileIds = selectedFileIds): void {
     if (!fileIds.length) return
+    const allowed = fileIds.every((id) => {
+      const file = fileById.get(id)
+      return file ? actionsForFile(file).delete : false
+    })
+    if (!allowed) {
+      setStatus('You do not have Delete on this folder.')
+      return
+    }
     const ok = window.confirm(
       fileIds.length === 1
         ? 'Delete this file from the vault?'
@@ -656,6 +678,10 @@ export default function VaultBrowser(): React.JSX.Element {
   function copySelection(): void {
     if (!selectedFileIds.length) {
       setStatus('Select a file first (Ctrl+C).')
+      return
+    }
+    if (!selectedFilesHave('copy')) {
+      setStatus('You do not have Copy on this folder.')
       return
     }
     const items = selectedFileIds
@@ -677,6 +703,10 @@ export default function VaultBrowser(): React.JSX.Element {
   function cutSelection(): void {
     if (!selectedFileIds.length) {
       setStatus('Select a file first (Ctrl+X).')
+      return
+    }
+    if (!selectedFilesHave('cut')) {
+      setStatus('You do not have Delete on this folder (needed to cut).')
       return
     }
     const items = selectedFileIds
@@ -713,6 +743,7 @@ export default function VaultBrowser(): React.JSX.Element {
   }
 
   function handleFileInput(files: FileList | null): void {
+    if (!canUploadHere) return
     if (!files?.length) return
     enqueueUploads(
       Array.from(files).map((file) => ({
@@ -725,6 +756,7 @@ export default function VaultBrowser(): React.JSX.Element {
   function handleDrop(event: React.DragEvent<HTMLElement>): void {
     event.preventDefault()
     setDragOver(false)
+    if (!canUploadHere) return
     const dropped = Array.from(event.dataTransfer.files)
     if (!dropped.length) return
     enqueueUploads(
@@ -760,6 +792,11 @@ export default function VaultBrowser(): React.JSX.Element {
   }
 
   async function moveFileToFolder(fileId: string, targetFolderId: string): Promise<void> {
+    const target = folders.find((f) => f.folderId === targetFolderId)
+    if (!target?.rights.edit) {
+      setStatus('You do not have Edit on that folder.')
+      return
+    }
     try {
       await moveMutation.mutateAsync({ fileId, targetFolderId })
     } catch {
@@ -776,16 +813,19 @@ export default function VaultBrowser(): React.JSX.Element {
       const key = event.key.toLowerCase()
 
       if (mod && key === 'c') {
+        if (!selectedFilesHave('copy')) return
         event.preventDefault()
         copySelection()
         return
       }
       if (mod && key === 'x') {
+        if (!selectedFilesHave('cut')) return
         event.preventDefault()
         cutSelection()
         return
       }
       if (mod && key === 'v') {
+        if (!here.paste) return
         event.preventDefault()
         void pasteClipboard()
         return
@@ -798,7 +838,7 @@ export default function VaultBrowser(): React.JSX.Element {
       if (key === 'f2') {
         const fileId = selectedFileIds.length === 1 ? selectedFileIds[0] : null
         const file = fileId ? visibleFiles.find((f) => f.fileId === fileId) : null
-        if (!file) return
+        if (!file || !actionsForFile(file).rename) return
         event.preventDefault()
         setRenameError(null)
         setRenameTarget(file)
@@ -806,11 +846,13 @@ export default function VaultBrowser(): React.JSX.Element {
       }
       if (key === 'delete' || key === 'backspace') {
         if (selectedFolderRowId) {
+          const folder = folders.find((f) => f.folderId === selectedFolderRowId)
+          if (!folder?.rights.delete) return
           event.preventDefault()
           deleteSelectedFolder(selectedFolderRowId)
           return
         }
-        if (!selectedFileIds.length) return
+        if (!selectedFileIds.length || !selectedFilesHave('delete')) return
         event.preventDefault()
         deleteSelectedFiles()
       }
@@ -851,6 +893,30 @@ export default function VaultBrowser(): React.JSX.Element {
       (item) => item.categoryId && item.categoryId !== target.categoryId
     )
   }, [clipboard, pasteTargetFolderId, selection, folders])
+
+  const contextMenuAllows = useMemo(() => {
+    if (!contextMenu) {
+      return { cut: false, copy: false, rename: false, paste: false, delete: false }
+    }
+    const file =
+      contextMenu.target.kind === 'file' ? fileById.get(contextMenu.target.fileId) : undefined
+    const fileActs = file ? actionsForFile(file) : null
+    const folderId =
+      contextMenu.target.kind === 'folder'
+        ? contextMenu.target.folderId
+        : (pasteTargetFolderId ?? (selection.type === 'folder' ? selection.folderId : null))
+    const pasteActs = vaultActions(folderRightsOf(folders, folderId))
+    return {
+      cut: Boolean(fileActs?.cut),
+      copy: Boolean(fileActs?.copy),
+      rename: Boolean(fileActs?.rename),
+      paste: pasteActs.paste,
+      delete:
+        contextMenu.target.kind === 'file'
+          ? Boolean(fileActs?.delete)
+          : contextMenu.target.kind === 'folder' && contextMenu.target.deletable
+    }
+  }, [contextMenu, fileById, folders, pasteTargetFolderId, selection])
 
   const sidebar = (
     <>
@@ -1021,61 +1087,68 @@ export default function VaultBrowser(): React.JSX.Element {
                 </Button>
               ) : null}
 
-              <label className={canUploadHere ? undefined : 'pointer-events-none opacity-40'}>
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  disabled={!canUploadHere}
-                  onChange={(e) => {
-                    handleFileInput(e.target.files)
-                    e.target.value = ''
-                  }}
-                />
-                <Button asChild size="sm" className="h-9 gap-1.5 sm:h-8" disabled={!canUploadHere}>
-                  <span className="cursor-pointer">
-                    <Upload className="size-3.5" />
-                    <span className="hidden xs:inline sm:inline">Upload</span>
-                  </span>
-                </Button>
-              </label>
+              {canUploadHere ? (
+                <label>
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      handleFileInput(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                  <Button asChild size="sm" className="h-9 gap-1.5 sm:h-8">
+                    <span className="cursor-pointer">
+                      <Upload className="size-3.5" />
+                      <span className="hidden xs:inline sm:inline">Upload</span>
+                    </span>
+                  </Button>
+                </label>
+              ) : null}
             </div>
 
             {/* Clipboard / selection actions — touch-friendly */}
             <div className="flex flex-wrap items-center gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={!selectedFileIds.length || !canDeleteHere}
-                onClick={cutSelection}
-                title="Cut (Ctrl+X)"
-              >
-                <Scissors className="size-3.5" />
-                Cut
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={!selectedFileIds.length || !canCopyHere}
-                onClick={copySelection}
-                title="Copy (Ctrl+C)"
-              >
-                <Copy className="size-3.5" />
-                Copy
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 gap-1 px-2 text-xs"
-                disabled={!canPasteHere || pasteMutation.isPending}
-                onClick={() => void pasteClipboard()}
-                title="Paste (Ctrl+V)"
-              >
-                <ClipboardPaste className="size-3.5" />
-                Paste{clipboardCount ? ` (${clipboardCount})` : ''}
-              </Button>
+              {canCutHere ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 gap-1 px-2 text-xs"
+                  disabled={!selectedFileIds.length}
+                  onClick={cutSelection}
+                  title="Cut (Ctrl+X)"
+                >
+                  <Scissors className="size-3.5" />
+                  Cut
+                </Button>
+              ) : null}
+              {canCopyHere ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 gap-1 px-2 text-xs"
+                  disabled={!selectedFileIds.length}
+                  onClick={copySelection}
+                  title="Copy (Ctrl+C)"
+                >
+                  <Copy className="size-3.5" />
+                  Copy
+                </Button>
+              ) : null}
+              {here.paste ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 gap-1 px-2 text-xs"
+                  disabled={!canPasteHere || pasteMutation.isPending}
+                  onClick={() => void pasteClipboard()}
+                  title="Paste (Ctrl+V)"
+                >
+                  <ClipboardPaste className="size-3.5" />
+                  Paste{clipboardCount ? ` (${clipboardCount})` : ''}
+                </Button>
+              ) : null}
               {canCreateSubfolder ? (
                 <Button
                   size="sm"
@@ -1155,6 +1228,7 @@ export default function VaultBrowser(): React.JSX.Element {
               dragOver && 'bg-sv-accent/5'
             )}
             onDragOver={(e) => {
+              if (!canUploadHere) return
               e.preventDefault()
               setDragOver(true)
             }}
@@ -1219,7 +1293,11 @@ export default function VaultBrowser(): React.JSX.Element {
                 <p className="max-w-sm text-xs text-sv-text-muted">
                   {selection.type === 'root'
                     ? 'Category folders will appear here once the vault is ready.'
-                    : 'Upload files, create a folder, or paste with Ctrl+V.'}
+                    : here.upload
+                      ? 'Upload files, create a folder, or paste with Ctrl+V.'
+                      : here.copy
+                        ? 'You can open and copy files in this folder.'
+                        : 'You can browse files in this folder.'}
                 </p>
               </div>
             ) : (
@@ -1269,6 +1347,7 @@ export default function VaultBrowser(): React.JSX.Element {
                           }}
                           onDragOver={(e) => {
                             if (!e.dataTransfer.types.includes('application/x-sv-file')) return
+                            if (!folder.rights.edit) return
                             e.preventDefault()
                             e.stopPropagation()
                             setDropTargetFolderId(folder.folderId)
@@ -1337,12 +1416,13 @@ export default function VaultBrowser(): React.JSX.Element {
                   {visibleFiles.map((file) => {
                     const selected = selectedFileIds.includes(file.fileId)
                     const isCut = cutFileIds.has(file.fileId)
+                    const acts = actionsForFile(file)
                     return (
                       <li key={file.fileId}>
                         <div
                           role="button"
                           tabIndex={0}
-                          draggable
+                          draggable={acts.move}
                           className={cn(
                             'flex cursor-default items-center gap-3 rounded-xl border border-sv-border/70 bg-sv-surface/60 px-3 py-3 transition md:grid md:grid-cols-[minmax(180px,2fr)_150px_120px_80px_180px] md:gap-2 md:rounded-none md:border-0 md:border-b md:border-sv-border/60 md:bg-transparent md:px-4 md:py-2',
                             selected && 'border-sv-accent/50 bg-sv-accent/10 md:bg-sv-accent/10',
@@ -1396,63 +1476,73 @@ export default function VaultBrowser(): React.JSX.Element {
                             className="flex shrink-0 justify-end gap-0.5"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 md:size-7"
-                              title="View"
-                              onClick={() => {
-                                setPasswordError(null)
-                                setPasswordTarget({ file, mode: 'open' })
-                              }}
-                            >
-                              <Eye className="size-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 md:size-7"
-                              title="Download"
-                              onClick={() => {
-                                setPasswordError(null)
-                                setPasswordTarget({ file, mode: 'download' })
-                              }}
-                            >
-                              <Download className="size-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="hidden size-7 sm:inline-flex"
-                              title="Move"
-                              onClick={() => {
-                                setMoveError(null)
-                                setMoveTarget(file)
-                              }}
-                            >
-                              <MoveRight className="size-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="hidden size-7 sm:inline-flex"
-                              title="Rename"
-                              onClick={() => {
-                                setRenameError(null)
-                                setRenameTarget(file)
-                              }}
-                            >
-                              <Pencil className="size-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-8 text-sv-danger hover:text-sv-danger md:size-7"
-                              title="Delete"
-                              onClick={() => deleteSelectedFiles([file.fileId])}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
+                            {acts.view ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 md:size-7"
+                                title="View"
+                                onClick={() => {
+                                  setPasswordError(null)
+                                  setPasswordTarget({ file, mode: 'open' })
+                                }}
+                              >
+                                <Eye className="size-3.5" />
+                              </Button>
+                            ) : null}
+                            {acts.download ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 md:size-7"
+                                title="Download"
+                                onClick={() => {
+                                  setPasswordError(null)
+                                  setPasswordTarget({ file, mode: 'download' })
+                                }}
+                              >
+                                <Download className="size-3.5" />
+                              </Button>
+                            ) : null}
+                            {acts.move ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="hidden size-7 sm:inline-flex"
+                                title="Move"
+                                onClick={() => {
+                                  setMoveError(null)
+                                  setMoveTarget(file)
+                                }}
+                              >
+                                <MoveRight className="size-3.5" />
+                              </Button>
+                            ) : null}
+                            {acts.rename ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="hidden size-7 sm:inline-flex"
+                                title="Rename"
+                                onClick={() => {
+                                  setRenameError(null)
+                                  setRenameTarget(file)
+                                }}
+                              >
+                                <Pencil className="size-3.5" />
+                              </Button>
+                            ) : null}
+                            {acts.delete ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-8 text-sv-danger hover:text-sv-danger md:size-7"
+                                title="Delete"
+                                onClick={() => deleteSelectedFiles([file.fileId])}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
                       </li>
@@ -1469,6 +1559,11 @@ export default function VaultBrowser(): React.JSX.Element {
         <VaultContextMenu
           state={contextMenu}
           canPaste={contextMenuCanPaste}
+          allowCut={contextMenuAllows.cut}
+          allowCopy={contextMenuAllows.copy}
+          allowRename={contextMenuAllows.rename}
+          allowPaste={contextMenuAllows.paste}
+          allowDelete={contextMenuAllows.delete}
           onClose={() => {
             setContextMenu(null)
             setPasteTargetFolderId(null)

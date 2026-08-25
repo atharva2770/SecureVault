@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
+import { secureZero } from '@securevault/core'
+
 import { apiConfig } from './config'
 
 export interface HttpSession {
@@ -10,6 +12,8 @@ export interface HttpSession {
   roles: string[]
   createdAt: number
   lastActivityAt: number
+  /** In-memory KEK for this session. Never sent to the browser. */
+  kek?: Buffer
 }
 
 const sessions = new Map<string, HttpSession>()
@@ -24,13 +28,16 @@ export class HttpSessionStore {
     return HttpSessionStore.instance
   }
 
-  create(input: Omit<HttpSession, 'sessionId' | 'createdAt' | 'lastActivityAt'>): HttpSession {
+  create(
+    input: Omit<HttpSession, 'sessionId' | 'createdAt' | 'lastActivityAt'>
+  ): HttpSession {
     const now = Date.now()
     const session: HttpSession = {
       ...input,
       sessionId: randomBytes(32).toString('hex'),
       createdAt: now,
-      lastActivityAt: now
+      lastActivityAt: now,
+      kek: input.kek ? Buffer.from(input.kek) : undefined
     }
     sessions.set(session.sessionId, session)
     return session
@@ -41,7 +48,7 @@ export class HttpSessionStore {
     const session = sessions.get(sessionId)
     if (!session) return null
     if (Date.now() - session.lastActivityAt > apiConfig.idleTimeoutMs) {
-      sessions.delete(sessionId)
+      this.drop(sessionId)
       return null
     }
     return session
@@ -54,8 +61,21 @@ export class HttpSessionStore {
     return session
   }
 
+  replaceKek(sessionId: string | undefined, kek: Buffer): void {
+    const session = this.get(sessionId)
+    if (!session) return
+    if (session.kek) secureZero(session.kek)
+    session.kek = Buffer.from(kek)
+  }
+
   destroy(sessionId: string | undefined): void {
-    if (sessionId) sessions.delete(sessionId)
+    if (sessionId) this.drop(sessionId)
+  }
+
+  private drop(sessionId: string): void {
+    const session = sessions.get(sessionId)
+    if (session?.kek) secureZero(session.kek)
+    sessions.delete(sessionId)
   }
 }
 

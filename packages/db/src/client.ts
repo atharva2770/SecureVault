@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { resolveDatabaseUrl, usesTrustedConnection } from './env'
 
 /**
- * Singleton Prisma database service for desktop main process and the future API.
+ * Singleton Prisma database service for the web API.
  * Uses the Prisma MSSQL driver adapter (required by Prisma ORM v7).
  *
  * Client construction is lazy so app startup / session checks never block on SQL Server.

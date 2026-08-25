@@ -2,7 +2,7 @@
 
 SecureVault is an **encrypted document vault** for teams. Files are encrypted at rest with **AES-256-GCM**, metadata and permissions live in **Microsoft SQL Server**, and cryptographic operations never run in the UI.
 
-This repository is an **npm workspace**. The desktop Electron app still talks over IPC. The local HTTP API (port 4000) shares Prisma, RBAC, and file encryption services, and can stream encrypted blobs. The React web UI is Phase 4.
+This repository is an **npm workspace**. The local HTTP API (port 4000) handles auth, RBAC, and encrypted file blobs. The React web UI on port 5173 is the only client.
 
 ---
 
@@ -25,46 +25,42 @@ This repository is an **npm workspace**. The desktop Electron app still talks ov
 | Layer | Technology |
 | --- | --- |
 | Workspace | npm workspaces (`apps/*`, `packages/*`) |
-| Desktop shell | Electron + electron-vite (`apps/desktop`) |
 | HTTP API | Fastify (`apps/api`) on port 4000 |
 | Shared domain | `@securevault/domain` — DTOs, RBAC, access-policy |
-| Shared core | `@securevault/core` — authz, folders, admin, crypto, web blobs |
+| Shared core | `@securevault/core` — authz, folders, admin, crypto, blobs |
 | Database | `@securevault/db` — Prisma + SQL Server |
-| Web blobs | Local disk (`data/vault-blobs`) + AES-256-GCM DEK wrapping (`VAULT_KMS_WRAP_KEY`) |
-| UI | React 19, TypeScript, Tailwind CSS v4, TanStack React Query |
-| Desktop backend | Electron main process (Auth, Crypto, Files, Folders, RBAC, Audit) |
+| Encrypted blobs | Local disk (`data/vault-blobs`) + AES-256-GCM DEK wrapping (`VAULT_KMS_WRAP_KEY`) |
+| UI | React 19, TypeScript, Tailwind CSS v4, TanStack React Query (`apps/web`) |
 | Cryptography | Argon2id, AES-256-GCM, SHA-256 checksums |
-| Packaging | electron-builder (Windows, macOS, Linux) |
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────┐     ┌──────────────────────────────┐
-│ apps/desktop (Electron)  │     │ apps/web (Vite :5173)        │
-│ React UI ──IPC── Main    │     │ React UI ──HTTP cookie──┐    │
-└────────────┬─────────────┘     └─────────────────────────┼────┘
-             │                                             │
-             │                    ┌────────────────────────┘
-             │                    ▼
-             │         apps/api (Fastify :4000)
-             │         cookie session + encrypted blobs
-             ▼                    │
-      @securevault/core  (ACL, folders, admin, crypto, VaultFileService)
-             │                    │
-             ├── @securevault/domain   @securevault/db (SQL Server)
-             │
-             ├── Desktop blobs: Electron userData + user KEK wrap
-             └── Web blobs: data/vault-blobs + local KMS wrap key
+┌──────────────────────────┐
+│ apps/web (Vite :5173)    │
+│ React UI ──HTTP cookie───┤
+└──────────────────────────┘
+                           │
+                           ▼
+                 apps/api (Fastify :4000)
+                 cookie session + encrypted blobs
+                           │
+                           ▼
+              @securevault/core  (ACL, folders, admin, crypto)
+                           │
+              @securevault/domain   @securevault/db (SQL Server)
+                           │
+              data/vault-blobs + VAULT_KMS_WRAP_KEY
 ```
 
 **Security rules**
 
-- The renderer and browser UI never receive KEK/DEK material.
+- The browser UI never receives KEK/DEK material.
 - ACL and permission checks are enforced in `@securevault/core` (`AccessControlService`).
 - Encrypted file blobs stay on disk (or later object storage); only metadata and wrapped keys are in the database.
-- The web API does **not** keep a user KEK in RAM. Web DEKs are wrapped with `VAULT_KMS_WRAP_KEY` (local KMS stand-in; swap for Azure Key Vault / AWS KMS later).
+- Web-uploaded DEKs are wrapped with `VAULT_KMS_WRAP_KEY` (local KMS stand-in; swap for Azure Key Vault / AWS KMS later).
 - Per-file access passwords are verified server-side before decrypt.
 
 ---
@@ -148,25 +144,19 @@ Generate the Prisma client after schema changes (`npm install` already does this
 npm run db:generate
 ```
 
-### 5. Start the desktop app
+### 5. Start the web app
 
 ```bash
 npm start
 ```
 
-The Electron window opens. The **first registered user** automatically receives the **Admin** role.
-
-(`npm run desktop` does the same thing.)
-
-### 6. Start the web app
+or:
 
 ```bash
 npm run dev
 ```
 
-This starts the API on port **4000** and the React UI on **http://localhost:5173**, and opens the browser. Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
-
-(`npm run web` does the same thing.)
+This starts the API on port **4000** and the React UI on **http://localhost:5173**, and opens the browser. The **first registered user** automatically receives the **Admin** role. Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
 
 To run the UI only (API already running):
 
@@ -180,19 +170,13 @@ npm run dev:web
 
 | Command | Description |
 | --- | --- |
-| `npm start` | Open the **desktop** Electron app |
-| `npm run dev` | Open the **web** app (API + UI, browser) |
-| `npm run desktop` | Same as `npm start` |
-| `npm run web` | Same as `npm run dev` |
+| `npm start` | Open the **web** app (API + UI, browser) |
+| `npm run dev` | Same as `npm start` |
+| `npm run web` | Same as `npm start` |
 | `npm run dev:api` | Start only the local API on http://127.0.0.1:4000 |
 | `npm run dev:web` | Start only the React UI on http://localhost:5173 |
-| `npm run build` | Typecheck and build the desktop app |
-| `npm run preview` | Preview the production desktop build |
-| `npm run build:win` | Build Windows installer (NSIS) |
-| `npm run build:mac` | Build macOS DMG |
-| `npm run build:linux` | Build Linux AppImage / deb |
+| `npm run build` | Typecheck and build the web app |
 | `npm run typecheck` | Typecheck all workspaces |
-| `npm run lint` | Lint the desktop app |
 | `npm run format` | Format the repo with Prettier |
 | `npm run db:generate` | Generate Prisma client |
 | `npm run db:migrate` | Create/apply a development migration |
@@ -206,14 +190,13 @@ npm run dev:web
 ```
 securevault/
 ├── apps/
-│   ├── desktop/                 # Electron desktop client (IPC)
 │   ├── api/                     # HTTP API — session auth + encrypted blob streaming
-│   └── web/                     # React web UI (Vite) on port 5173 — profile, account, admin pages
+│   └── web/                     # React web UI (Vite) on port 5173
 ├── packages/
 │   ├── domain/                  # DTOs, RBAC, access-policy
 │   ├── db/                      # Prisma schema, migrations, DBService
 │   └── core/                    # Authz, folders, admin, crypto, local blob/KMS
-├── data/vault-blobs/            # Local web ciphertext (gitignored)
+├── data/vault-blobs/            # Local ciphertext (gitignored)
 ├── .env.example
 └── package.json
 ```
@@ -267,19 +250,14 @@ Core tables include:
 - Treat the **master password** and **per-file passwords** as secrets; they are not recoverable if lost.
 - Run SQL Server on a trusted network; for remote or internet-facing deployments, place a REST API in front of the database rather than embedding connection strings in a shipped client.
 - Review `AuditLogs` regularly for access and ACL-denial events.
-- Keep dependencies updated (`npm audit`, Electron security releases).
+- Keep dependencies updated (`npm audit`).
 - Treat `VAULT_KMS_WRAP_KEY` as a secret. Losing it makes web-uploaded files unrecoverable.
 
 ---
 
 ## Roadmap
 
-- **Phase 0 (done)** — npm workspace; Prisma + domain packages; desktop still uses IPC
-- **Phase 1 (done)** — single authz engine (`resolveFolderRightsPure`); services take `userId` / actor; desktop IPC still reads `VaultSession`
-- **Phase 2 (done)** — local Fastify API on port 4000; session cookie auth; folders/files list/admin ACL JSON; same SQL Server
-- **Phase 3 (done)** — encrypted blobs + local KMS wrapping; streaming upload/download; per-file password verified on the API
-- **Phase 4 (done)** — web UI (Unlock, VaultBrowser, Admin) over HTTP on port 5173
-- **Phase 5 (done)** — desktop and web are separate apps. `npm start` is Electron/IPC; `npm run dev` is the browser UI + API. Set `DESKTOP_USE_WEB_UI=true` only if Electron should wrap the web UI
+- **Phase 5 (done)** — web-only client. `npm start` / `npm run dev` run the API and browser UI.
 
 ---
 
@@ -290,8 +268,7 @@ Core tables include:
 | `Missing DATABASE_URL` | Create `.env` from `.env.example` and set the connection string |
 | `VAULT_KMS_WRAP_KEY must be 64 hex characters` | Set a 32-byte wrap key in `.env` (see `.env.example`) |
 | Migration fails | Database exists, SQL Server is running, credentials are correct |
-| `Preload bridge unavailable` | Fully quit the app and run `npm start` again |
-| Move/Copy unavailable | Restart dev mode so the preload script reloads |
+| Cannot open old files | Files uploaded from the old desktop app must be uploaded again from the web vault |
 | Login works but no folders | Run migrations; ensure category seed migration applied |
 
 ---
@@ -299,9 +276,9 @@ Core tables include:
 ## Contributing
 
 1. Fork the repository and create a feature branch.
-2. Run `npm run typecheck` and `npm run lint` before opening a pull request.
+2. Run `npm run typecheck` before opening a pull request.
 3. Do not commit `.env`, build output (`out/`, `release/`), or `node_modules/`.
-4. Keep security-sensitive logic in `packages/core` and `apps/api` — never in a renderer or browser UI.
+4. Keep security-sensitive logic in `packages/core` and `apps/api` — never in the browser UI.
 5. Put shared contracts in `packages/domain` and schema/migrations only in `packages/db`.
 
 ---

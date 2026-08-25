@@ -102,7 +102,7 @@ async function downloadBlob(
 ): Promise<{ blob: Blob; fileName: string; mimeType: string | null }> {
   const res = await apiFetch(`/api/files/${fileId}/download`, {
     method: 'POST',
-    ...jsonBody({ password })
+    ...jsonBody({ password, intent: mode })
   })
   if (!res.ok) {
     throw new Error(await readError(res))

@@ -287,7 +287,7 @@ export default function UsersPage(): React.JSX.Element {
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="flex flex-col overflow-hidden rounded-2xl border border-sv-border bg-sv-surface">
+        <aside className="flex flex-col overflow-hidden rounded-2xl border border-sv-border bg-sv-surface lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)]">
           <div className="border-b border-sv-border p-3">
             <div className="relative">
               <Users className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sv-text-muted" />
@@ -349,7 +349,7 @@ export default function UsersPage(): React.JSX.Element {
           </ul>
         </aside>
 
-        <section className="min-h-[420px] rounded-2xl border border-sv-border bg-sv-surface p-5 sm:p-6">
+        <section className="rounded-2xl border border-sv-border bg-sv-surface p-5 sm:p-6">
           {creating ? (
             <>
               <div className="mb-5 flex items-start gap-3">
@@ -420,6 +420,7 @@ export default function UsersPage(): React.JSX.Element {
 
               <div className="mt-6 flex justify-end">
                 <Button
+                  type="button"
                   className="h-10 gap-1.5 px-4"
                   disabled={
                     !newUsername.trim() || newPassword.length < 8 || createMutation.isPending
@@ -454,6 +455,7 @@ export default function UsersPage(): React.JSX.Element {
                 <div className="flex items-center gap-3">
                   <PersistBadge phase={persistPhase} />
                   <Button
+                    type="button"
                     size="sm"
                     variant="secondary"
                     className="h-8 text-xs"
