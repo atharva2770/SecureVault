@@ -9,24 +9,15 @@ import {
   requireSession,
   setSessionCookie
 } from '../plugins/auth'
+import {
+  assertLoginAllowed,
+  assertRegisterAllowed,
+  recordLoginFailure,
+  recordLoginSuccess,
+  recordRegisterAttempt,
+  TooManyAttemptsError
+} from '../plugins/rateLimit'
 import { httpSessions } from '../session'
-
-const loginAttempts = new Map<string, { count: number; resetAt: number }>()
-const LOGIN_WINDOW_MS = 15 * 60 * 1000
-const LOGIN_MAX = 10
-
-function assertLoginRate(ip: string): void {
-  const now = Date.now()
-  const row = loginAttempts.get(ip)
-  if (!row || now > row.resetAt) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
-    return
-  }
-  row.count += 1
-  if (row.count > LOGIN_MAX) {
-    throw new Error('Too many login attempts. Try again later.')
-  }
-}
 
 function sessionPayload(unlocked: boolean, session: ReturnType<typeof httpSessions.create> | null) {
   return {
@@ -50,6 +41,18 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/auth/register', async (request, reply) => {
     try {
+      try {
+        assertRegisterAllowed(request.ip)
+      } catch (error) {
+        if (error instanceof TooManyAttemptsError) {
+          return reply
+            .header('Retry-After', Math.ceil(error.retryAfterMs / 1000))
+            .status(429)
+            .send({ error: error.message })
+        }
+        throw error
+      }
+      recordRegisterAttempt(request.ip)
       const body = (request.body ?? {}) as { username?: string; password?: string }
       const result = await credentials.register(body.username ?? '', body.password ?? '', {
         ipOrDevice: clientMeta(request)
@@ -74,12 +77,25 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   })
 
   app.post('/api/auth/login', async (request, reply) => {
+    const body = (request.body ?? {}) as { username?: string; password?: string }
+    const username = body.username ?? ''
     try {
-      assertLoginRate(request.ip)
-      const body = (request.body ?? {}) as { username?: string; password?: string }
-      const result = await credentials.login(body.username ?? '', body.password ?? '', {
+      assertLoginAllowed(request.ip, username)
+    } catch (error) {
+      if (error instanceof TooManyAttemptsError) {
+        return reply
+          .header('Retry-After', Math.ceil(error.retryAfterMs / 1000))
+          .status(429)
+          .send({ error: error.message })
+      }
+      throw error
+    }
+
+    try {
+      const result = await credentials.login(username, body.password ?? '', {
         ipOrDevice: clientMeta(request)
       })
+      recordLoginSuccess(request.ip, username)
       try {
         const session = httpSessions.create({
           userId: result.user.userId,
@@ -95,10 +111,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         secureZero(result.kek)
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Login failed.'
-      if (message.includes('Too many')) {
-        return reply.status(429).send({ error: message })
-      }
+      recordLoginFailure(request.ip, username)
       return sendError(reply, error)
     }
   })
@@ -134,7 +147,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         body.currentPassword ?? '',
         body.newPassword ?? ''
       )
-      httpSessions.replaceKek(readSessionId(request), result.kek)
+      const currentSessionId = readSessionId(request)
+      // A credential change invalidates every other live session for this user.
+      httpSessions.destroyAllForUser(session.userId, currentSessionId)
+      httpSessions.replaceKek(currentSessionId, result.kek)
       secureZero(result.kek)
       return { ok: true }
     } catch (error) {

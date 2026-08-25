@@ -5,6 +5,7 @@ import { RoleCode } from '@securevault/domain'
 import { AuditAction, AuditService } from '../audit/AuditService'
 import type { Argon2Params } from '../crypto/CryptoService'
 import { CryptoService } from '../crypto/CryptoService'
+import { enforcePasswordPolicy } from './PasswordPolicy'
 import { RbacService } from '../rbac/RbacService'
 import { safeEqualHex, secureZero, sha256Hex } from '../utils/secure'
 
@@ -59,6 +60,7 @@ export class AuthCredentials {
   ): Promise<AuthCredentialResult> {
     const normalized = this.normalizeUsername(username)
     this.assertPassword(password)
+    await enforcePasswordPolicy(password, { username: normalized })
 
     const existing = await this.db.prisma.user.findUnique({
       where: { username: normalized }
@@ -132,6 +134,9 @@ export class AuthCredentials {
       where: { username: normalized }
     })
     if (!user) {
+      // Equalize timing with the real KDF path so a fast reply can't be used to
+      // enumerate valid usernames. The result is discarded.
+      await this.burnKekDerivation(password)
       throw new Error('Invalid username or password.')
     }
     if (user.isDisabled) {
@@ -198,6 +203,7 @@ export class AuthCredentials {
     this.assertPassword(newPassword)
 
     const user = await this.db.prisma.user.findUniqueOrThrow({ where: { userId } })
+    await enforcePasswordPolicy(newPassword, { username: user.username })
     const stored = this.parseStoredParams(user.argon2Params)
 
     let currentKek: Buffer | null = null
@@ -270,6 +276,20 @@ export class AuthCredentials {
   assertPassword(password: string): void {
     if (!password || password.length < 8) {
       throw new Error('Password must be at least 8 characters.')
+    }
+  }
+
+  /**
+   * Derives a throwaway KEK to equalize the wall-clock cost of a failed login
+   * for an unknown username against a real credential check (anti-enumeration).
+   */
+  private async burnKekDerivation(password: string): Promise<void> {
+    try {
+      const salt = this.crypto.generateSalt(32)
+      const kek = await this.crypto.deriveKEK(password || 'x', salt)
+      secureZero(kek)
+    } catch {
+      /* ignore — this path only exists to spend time */
     }
   }
 

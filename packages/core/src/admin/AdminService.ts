@@ -14,6 +14,7 @@ import type {
 import { PermissionCode, RoleCode } from '@securevault/domain'
 import { AccessControlService } from '../access/AccessControlService'
 import { AuditAction, AuditService } from '../audit/AuditService'
+import { enforcePasswordPolicy } from '../auth/PasswordPolicy'
 import type { Argon2Params } from '../crypto/CryptoService'
 import { CryptoService } from '../crypto/CryptoService'
 import { DBService } from '@securevault/db'
@@ -105,6 +106,7 @@ export class AdminService {
     if (!password || password.length < 8) {
       throw new Error('Password must be at least 8 characters.')
     }
+    await enforcePasswordPolicy(password, { username })
 
     if (roleCode === RoleCode.ADMIN && !(await this.acl.isAdmin(actorId))) {
       throw new Error('Only an Admin can create another Admin.')

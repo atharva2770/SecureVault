@@ -47,7 +47,13 @@ export class HttpSessionStore {
     if (!sessionId) return null
     const session = sessions.get(sessionId)
     if (!session) return null
-    if (Date.now() - session.lastActivityAt > apiConfig.idleTimeoutMs) {
+    const now = Date.now()
+    if (now - session.lastActivityAt > apiConfig.idleTimeoutMs) {
+      this.drop(sessionId)
+      return null
+    }
+    // Absolute cap independent of activity: a stolen session can't live forever.
+    if (now - session.createdAt > apiConfig.sessionAbsoluteMaxMs) {
       this.drop(sessionId)
       return null
     }
@@ -70,6 +76,22 @@ export class HttpSessionStore {
 
   destroy(sessionId: string | undefined): void {
     if (sessionId) this.drop(sessionId)
+  }
+
+  /**
+   * Revokes every session belonging to a user, optionally keeping one alive
+   * (the one that initiated a password change). Used to make a credential
+   * change invalidate all other logged-in sessions immediately.
+   */
+  destroyAllForUser(userId: string, exceptSessionId?: string): number {
+    let revoked = 0
+    for (const [id, session] of sessions) {
+      if (session.userId !== userId) continue
+      if (exceptSessionId && id === exceptSessionId) continue
+      this.drop(id)
+      revoked += 1
+    }
+    return revoked
   }
 
   private drop(sessionId: string): void {

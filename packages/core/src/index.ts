@@ -25,6 +25,14 @@ export { VaultFileService } from './files/VaultFileService'
 export { toFileDto, guessMime, safeFileName } from './files/fileDto'
 export { AuthCredentials } from './auth/AuthCredentials'
 export type { AuthCredentialResult, VerifiedUser, AuthAuditMeta } from './auth/AuthCredentials'
+export {
+  enforcePasswordPolicy,
+  assertPasswordComplexity,
+  breachCount,
+  PasswordPolicyError,
+  MIN_PASSWORD_LENGTH
+} from './auth/PasswordPolicy'
+export type { PasswordPolicyOptions } from './auth/PasswordPolicy'
 
 export {
   BLOB_URI_SCHEME,
