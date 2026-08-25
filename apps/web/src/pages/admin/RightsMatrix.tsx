@@ -1,7 +1,10 @@
-import { Loader2, ShieldCheck } from 'lucide-react'
+import { Loader2, ShieldCheck, FolderOpen, Users } from 'lucide-react'
 
 import type { AdminUserDto, FolderAclDto, FolderDto } from '@securevault/domain'
 import { UserAvatar } from '@/components/UserAvatar'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { MatrixSkeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { moduleThemeForCategory } from '@/theme/modules'
 
@@ -20,6 +23,8 @@ interface RightsMatrixProps {
   modules: FolderDto[]
   aclsByFolder: Record<string, FolderAclDto[]>
   loading: boolean
+  error?: boolean
+  onRetry?: () => void
   isPendingCell: (userId: string, folderId: string) => boolean
   onToggle: (userId: string, folderId: string, next: boolean) => void
 }
@@ -34,23 +39,36 @@ export function RightsMatrix({
   modules,
   aclsByFolder,
   loading,
+  error,
+  onRetry,
   isPendingCell,
   onToggle
 }: RightsMatrixProps): React.JSX.Element {
   if (loading) {
+    return <MatrixSkeleton rows={5} cols={Math.max(modules.length, 6)} />
+  }
+
+  if (error) {
     return (
-      <div className="flex items-center justify-center gap-2 py-16 text-sm text-sv-text-muted">
-        <Loader2 className="size-4 animate-spin" />
-        Loading rights…
-      </div>
+      <ErrorState
+        title="Rights didn’t load"
+        description="The access matrix couldn’t be fetched. Try again — no grants were changed."
+        onRetry={onRetry}
+      />
     )
   }
 
   if (users.length === 0 || modules.length === 0) {
     return (
-      <div className="py-16 text-center text-sm text-sv-text-muted">
-        {modules.length === 0 ? 'No modules to assign yet.' : 'No people to show.'}
-      </div>
+      <EmptyState
+        icon={modules.length === 0 ? FolderOpen : Users}
+        title={modules.length === 0 ? 'No modules to assign yet' : 'No people to show'}
+        description={
+          modules.length === 0
+            ? 'Modules appear here once category folders exist in the vault.'
+            : 'Invite a user first, then grant them modules from this matrix.'
+        }
+      />
     )
   }
 
@@ -97,10 +115,10 @@ export function RightsMatrix({
               const admin = isAdminAccount(user)
               const role = admin ? 'Admin' : 'Member'
               return (
-                <tr key={user.userId} className="group transition-colors hover:bg-sv-surface-2/60">
+                <tr key={user.userId} className="group transition-colors duration-fast ease-sv hover:bg-sv-surface-2/60">
                   <th
                     scope="row"
-                    className="sticky left-0 z-[1] border-b border-sv-border bg-sv-surface px-4 py-2.5 text-left font-normal transition-colors group-hover:bg-sv-surface-2/60"
+                    className="sticky left-0 z-[1] border-b border-sv-border bg-sv-surface px-4 py-2.5 text-left font-normal transition-colors duration-fast ease-sv group-hover:bg-sv-surface-2/60"
                   >
                     <span className="flex items-center gap-2.5">
                       <UserAvatar username={user.username} size="sm" />

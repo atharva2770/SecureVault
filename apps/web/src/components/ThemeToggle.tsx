@@ -31,14 +31,14 @@ export function ThemeToggle({ className }: { className?: string }): React.JSX.El
       <Sun
         aria-hidden="true"
         className={cn(
-          'absolute size-5 transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0',
+          'absolute size-5 transition-all duration-med ease-sv motion-reduce:transition-none motion-reduce:duration-0',
           isDark ? '-rotate-90 scale-0 opacity-0' : 'rotate-0 scale-100 opacity-100'
         )}
       />
       <Moon
         aria-hidden="true"
         className={cn(
-          'absolute size-5 transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:duration-0',
+          'absolute size-5 transition-all duration-med ease-sv motion-reduce:transition-none motion-reduce:duration-0',
           isDark ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-0 opacity-0'
         )}
       />

@@ -16,6 +16,9 @@ import { api } from '@/api/vault'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { TableRowSkeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/toast'
 import { UserAvatar } from '@/components/UserAvatar'
 import PageShell from '@/layout/PageShell'
@@ -316,15 +319,45 @@ export default function UsersPage(): React.JSX.Element {
               </thead>
               <tbody>
                 {usersQuery.isPending ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <TableRowSkeleton key={i} columns={5} />
+                  ))
+                ) : usersQuery.isError ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sv-text-muted">
-                      Loading people…
+                    <td colSpan={5}>
+                      <ErrorState
+                        className="py-12"
+                        title="People didn’t load"
+                        description={
+                          usersQuery.error instanceof Error
+                            ? usersQuery.error.message
+                            : 'Couldn’t reach the directory. Try again in a moment.'
+                        }
+                        onRetry={() => void usersQuery.refetch()}
+                      />
                     </td>
                   </tr>
                 ) : pagedUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sv-text-muted">
-                      No people found.
+                    <td colSpan={5}>
+                      <EmptyState
+                        className="py-12"
+                        icon={Users}
+                        title={search.trim() ? 'No people match that search' : 'No people yet'}
+                        description={
+                          search.trim()
+                            ? 'Try a different name, or clear the search.'
+                            : 'Invite someone so they can sign in and receive module access.'
+                        }
+                        action={
+                          search.trim() ? undefined : (
+                            <Button onClick={() => setInviteOpen(true)}>
+                              <UserPlus />
+                              Invite user
+                            </Button>
+                          )
+                        }
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -336,7 +369,7 @@ export default function UsersPage(): React.JSX.Element {
                     return (
                       <tr
                         key={user.userId}
-                        className="border-t border-sv-border transition-colors hover:bg-sv-surface-2/60"
+                        className="border-t border-sv-border transition-colors duration-fast ease-sv hover:bg-sv-surface-2/60"
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -455,6 +488,11 @@ export default function UsersPage(): React.JSX.Element {
             modules={modules}
             aclsByFolder={aclsByFolder}
             loading={foldersQuery.isPending || (modules.length > 0 && aclsQuery.isPending)}
+            error={foldersQuery.isError || aclsQuery.isError}
+            onRetry={() => {
+              void foldersQuery.refetch()
+              void aclsQuery.refetch()
+            }}
             isPendingCell={isPendingCell}
             onToggle={(userId, folderId, next) => {
               const user = users.find((u) => u.userId === userId)
@@ -500,7 +538,7 @@ function TabButton({
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        '-mb-px flex min-h-11 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:transition-none',
+        '-mb-px flex min-h-11 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition duration-fast ease-sv focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:transition-none',
         active
           ? 'border-sv-accent text-sv-text'
           : 'border-transparent text-sv-text-muted hover:text-sv-text'

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
   on them. No hardcoded colors: everything resolves from Prompt 1 tokens.
 */
 const buttonVariants = cva(
-  "sv-focus inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium outline-none transition-all focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none max-sm:min-h-11 max-sm:min-w-11 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "sv-focus inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium outline-none transition-all duration-fast ease-sv focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none max-sm:min-h-11 max-sm:min-w-11 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

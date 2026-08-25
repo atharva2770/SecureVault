@@ -55,7 +55,7 @@ export function ModuleCard({
   return (
     <Card
       className={cn(
-        'group relative overflow-hidden shadow-card outline-none transition-all duration-200 motion-reduce:transition-none',
+        'group relative overflow-hidden shadow-card outline-none transition-all duration-fast ease-sv motion-reduce:transition-none',
         interactive &&
           'cursor-pointer hover:-translate-y-1 hover:shadow-modal focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:hover:translate-y-0',
         locked && 'select-none'
@@ -78,12 +78,12 @@ export function ModuleCard({
       {/* Animated corner accent — reveals on hover, consistent across themes */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-10 -right-10 size-28 rounded-full opacity-0 blur-2xl transition-all duration-300 group-hover:scale-125 group-hover:opacity-70 motion-reduce:transition-none"
+        className="pointer-events-none absolute -top-10 -right-10 size-28 rounded-full opacity-0 blur-2xl transition-all duration-med ease-sv group-hover:scale-125 group-hover:opacity-70 motion-reduce:transition-none"
         style={{ backgroundColor: `color-mix(in srgb, ${colorVar} 45%, transparent)` }}
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute top-0 right-0 h-16 w-16 origin-top-right scale-0 opacity-0 transition-all duration-300 group-hover:scale-100 group-hover:opacity-100 motion-reduce:transition-none"
+        className="pointer-events-none absolute top-0 right-0 h-16 w-16 origin-top-right scale-0 opacity-0 transition-all duration-med ease-sv group-hover:scale-100 group-hover:opacity-100 motion-reduce:transition-none"
         style={{
           background: `linear-gradient(225deg, color-mix(in srgb, ${colorVar} 55%, transparent), transparent 60%)`
         }}

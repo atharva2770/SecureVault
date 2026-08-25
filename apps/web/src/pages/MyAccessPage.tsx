@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
+import { FolderLock } from 'lucide-react'
 
 import { api } from '@/api/vault'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { TableRowSkeleton } from '@/components/ui/skeleton'
 import PageShell from '@/layout/PageShell'
 
 function rightsLabel(rights: {
@@ -33,14 +36,26 @@ export default function MyAccessPage(): React.JSX.Element {
     >
       <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface">
         {query.isLoading ? (
-          <div className="flex items-center gap-2 p-6 text-sv-text-muted">
-            <Loader2 className="size-4 animate-spin" />
-            Loading…
-          </div>
+          <table className="w-full" aria-busy="true" aria-label="Loading access">
+            <tbody>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <TableRowSkeleton key={i} columns={2} />
+              ))}
+            </tbody>
+          </table>
+        ) : query.isError ? (
+          <ErrorState
+            className="py-12"
+            title="Access didn’t load"
+            description="We couldn’t list your folder rights. Try again in a moment."
+            onRetry={() => void query.refetch()}
+          />
         ) : (query.data ?? []).length === 0 ? (
-          <p className="p-4 text-sm text-sv-text-muted">
-            No folders with View access. Ask an admin to grant folder permissions.
-          </p>
+          <EmptyState
+            icon={FolderLock}
+            title="No folders assigned yet"
+            description="You don’t have View access on any folder. Contact your admin to be granted a module."
+          />
         ) : (
           <ul className="divide-y divide-sv-border">
             {(query.data ?? []).map((entry) => (

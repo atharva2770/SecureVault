@@ -19,7 +19,7 @@ function Input({ className, type = 'text', error, ...props }: InputProps): React
   const resolvedType = isPassword && reveal ? 'text' : type
 
   const inputClass = cn(
-    'flex h-11 w-full rounded-md border bg-sv-bg px-3 py-1 text-sm text-sv-text shadow-sm outline-none transition placeholder:text-sv-text-faint disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none sm:h-9',
+    'flex h-11 w-full rounded-md border bg-sv-bg px-3 py-1 text-sm text-sv-text shadow-sm outline-none transition duration-fast ease-sv placeholder:text-sv-text-faint disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none sm:h-9',
     error
       ? 'border-sv-danger focus-visible:border-sv-danger focus-visible:ring-2 focus-visible:ring-sv-danger focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface'
       : 'border-sv-border focus-visible:border-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
   ArrowUp,
@@ -39,6 +39,7 @@ import { useAuth } from '@/auth/AuthProvider'
 import FileNameModal from '@/components/FileNameModal'
 import ModuleGrid, { type ModuleGridItem } from '@/components/ModuleGrid'
 import ModulePage from '@/components/ModulePage'
+import { PageTransition } from '@/components/PageTransition'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
 import RenameFileModal from '@/components/RenameFileModal'
@@ -48,6 +49,9 @@ import VaultContextMenu, {
 } from '@/components/VaultContextMenu'
 import UploadLockModal, { type PendingUpload } from '@/components/UploadLockModal'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { FileRowSkeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { folderRightsOf, vaultActions } from '@/lib/vault-actions'
 import { moduleThemeForCategory } from '@/theme/modules'
@@ -59,6 +63,34 @@ interface FolderNode extends FolderDto {
 type Selection =
   | { type: 'root' }
   | { type: 'folder'; folderId: string; categoryId: string | null }
+
+function categoryRootOf(folder: FolderDto, folders: FolderDto[]): FolderDto | null {
+  if (folder.isCategoryRoot) return folder
+  const byId = new Map(folders.map((f) => [f.folderId, f]))
+  let cur: FolderDto | undefined = folder
+  while (cur) {
+    if (cur.isCategoryRoot) return cur
+    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined
+  }
+  return folders.find((f) => f.isCategoryRoot && f.categoryId === folder.categoryId) ?? null
+}
+
+function syncVaultRoute(
+  next: Selection,
+  folders: FolderDto[],
+  pathname: string,
+  go: (path: string) => void
+): void {
+  if (next.type === 'root') {
+    if (pathname !== '/') go('/')
+    return
+  }
+  const folder = folders.find((f) => f.folderId === next.folderId)
+  if (!folder) return
+  const root = categoryRootOf(folder, folders)
+  const path = `/m/${(root ?? folder).folderId}`
+  if (pathname !== path) go(path)
+}
 
 interface VaultClipboard {
   mode: 'copy' | 'cut'
@@ -241,6 +273,9 @@ function FolderTreeItem({
 export default function VaultBrowser(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { isAdmin } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { folderId: routeModuleId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const [selection, setSelection] = useState<Selection>({ type: 'root' })
   const [fileNameFolder, setFileNameFolder] = useState<FolderDto | null>(null)
@@ -284,6 +319,32 @@ export default function VaultBrowser(): React.JSX.Element {
 
   const categories = sidebarQuery.data?.categories ?? []
   const folders = sidebarQuery.data?.folders ?? []
+
+  useEffect(() => {
+    if (!routeModuleId) {
+      setSelection((prev) => (prev.type === 'root' ? prev : { type: 'root' }))
+      return
+    }
+    const moduleFolder = folders.find((f) => f.folderId === routeModuleId)
+    if (!moduleFolder) return
+    setSelection((prev) => {
+      if (prev.type === 'folder') {
+        const current = folders.find((f) => f.folderId === prev.folderId)
+        if (
+          current &&
+          (current.folderId === moduleFolder.folderId ||
+            current.categoryId === moduleFolder.categoryId)
+        ) {
+          return prev
+        }
+      }
+      return {
+        type: 'folder',
+        folderId: moduleFolder.folderId,
+        categoryId: moduleFolder.categoryId
+      }
+    })
+  }, [routeModuleId, folders])
 
   const filesQuery = useQuery({
     queryKey: ['files', selection],
@@ -549,15 +610,18 @@ export default function VaultBrowser(): React.JSX.Element {
     if (pushHistory) {
       setNavHistory((prev) => [...prev, next])
     }
+    syncVaultRoute(next, folders, location.pathname, navigate)
   }
 
   function goBack(): void {
     setNavHistory((prev) => {
       if (prev.length <= 1) return prev
-      const next = prev.slice(0, -1)
-      setSelection(next[next.length - 1])
+      const nextHist = prev.slice(0, -1)
+      const dest = nextHist[nextHist.length - 1]!
+      setSelection(dest)
       setSelectedFileIds([])
-      return next
+      syncVaultRoute(dest, folders, location.pathname, navigate)
+      return nextHist
     })
   }
 
@@ -1017,7 +1081,7 @@ export default function VaultBrowser(): React.JSX.Element {
         <aside
           className={cn(
             'z-40 flex w-[min(100%,var(--sv-sidebar-width))] shrink-0 flex-col border-r border-sv-border bg-sv-surface',
-            'fixed inset-y-0 left-0 top-[var(--sv-header-height)] transition-transform duration-200 motion-reduce:transition-none md:static md:translate-x-0',
+            'fixed inset-y-0 left-0 top-[var(--sv-header-height)] transition-transform duration-fast ease-sv motion-reduce:transition-none md:static md:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
             sidebarCollapsed && 'md:hidden'
           )}
@@ -1318,23 +1382,49 @@ export default function VaultBrowser(): React.JSX.Element {
             ) : null}
 
             {selection.type === 'root' && !isSearching ? (
-              <ModuleGrid
-                items={moduleItems}
-                loading={sidebarQuery.isLoading}
-                isAdmin={isAdmin}
-                onOpen={(folder) => openFolder(folder)}
-              />
+              <PageTransition viewKey="dashboard">
+                <ModuleGrid
+                  items={moduleItems}
+                  loading={sidebarQuery.isLoading}
+                  error={sidebarQuery.isError}
+                  onRetry={() => void sidebarQuery.refetch()}
+                  isAdmin={isAdmin}
+                  onOpen={(folder) => openFolder(folder)}
+                />
+              </PageTransition>
             ) : loading ? (
-              <div className="flex h-40 items-center justify-center gap-2 text-sv-text-muted">
-                <Loader2 className="size-5 animate-spin" />
-                Loading…
-              </div>
-            ) : filesQuery.isError ? (
-              <p className="p-4 text-sm text-sv-danger">
-                {(filesQuery.error as Error).message || 'Failed to load.'}
-              </p>
+              isModuleRoot ? (
+                <PageTransition viewKey="module">
+                  <ModulePage
+                    theme={moduleTheme}
+                    folderName={selectedFolder?.name ?? 'Module'}
+                    subfolders={[]}
+                    loading
+                    onOpenFolder={openFolder}
+                    onPickFile={(folder) => setFileNameFolder(folder)}
+                    onBackToDashboard={() => navigateTo({ type: 'root' })}
+                  />
+                </PageTransition>
+              ) : (
+                <ul className="space-y-1 p-2 pb-24 md:space-y-0 md:p-0 md:pb-8" aria-busy="true" aria-label="Loading files">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <FileRowSkeleton key={i} />
+                  ))}
+                </ul>
+              )
+            ) : (isSearching ? searchAllQuery.isError : filesQuery.isError) ? (
+              <ErrorState
+                title={isSearching ? 'Search didn’t finish' : 'This folder didn’t load'}
+                description={
+                  ((isSearching ? searchAllQuery.error : filesQuery.error) as Error)?.message ||
+                  'We couldn’t list files just now. Try again — nothing has been changed.'
+                }
+                onRetry={() =>
+                  void (isSearching ? searchAllQuery.refetch() : filesQuery.refetch())
+                }
+              />
             ) : (
-              <>
+              <PageTransition viewKey={isModuleRoot ? 'module' : 'folder'}>
                 {isModuleRoot ? (
                   <ModulePage
                     theme={moduleTheme}
@@ -1347,17 +1437,23 @@ export default function VaultBrowser(): React.JSX.Element {
                 ) : null}
 
                 {isEmpty && !isModuleRoot ? (
-                  <div className="flex h-64 flex-col items-center justify-center gap-2 px-4 text-center">
-                    <FolderOpen className="size-12 text-sv-text-muted/50" />
-                    <p className="text-sm font-medium text-sv-text">This folder is empty</p>
-                    <p className="max-w-sm text-xs text-sv-text-muted">
-                      {here.upload
+                  <EmptyState
+                    icon={FolderOpen}
+                    title="This folder is empty"
+                    description={
+                      here.upload
                         ? 'Upload files, create a folder, or paste with Ctrl+V.'
                         : here.copy
                           ? 'You can open and copy files in this folder.'
-                          : 'You can browse files in this folder.'}
-                    </p>
-                  </div>
+                          : 'You can browse files in this folder.'
+                    }
+                  />
+                ) : isSearching && visibleFiles.length === 0 ? (
+                  <EmptyState
+                    icon={Search}
+                    title="No matches"
+                    description={`Nothing in the vault is named like “${search.trim()}”.`}
+                  />
                 ) : isModuleRoot && visibleFiles.length === 0 ? null : (
               <div>
                 {/* Desktop column headers */}
@@ -1610,7 +1706,7 @@ export default function VaultBrowser(): React.JSX.Element {
                 </ul>
               </div>
                 )}
-              </>
+              </PageTransition>
             )}
           </main>
         </section>

@@ -35,6 +35,16 @@ function applyTheme(theme: ThemePreference): void {
   document.documentElement.setAttribute('data-theme', theme)
 }
 
+const THEME_SWITCH_MS = 350
+
+function beginThemeSwitch(): void {
+  const root = document.documentElement
+  root.classList.add('theme-switching')
+  window.setTimeout(() => {
+    root.classList.remove('theme-switching')
+  }, THEME_SWITCH_MS)
+}
+
 /*
   Pre-paint safeguard. The primary anti-FOUC guard is the inline script in
   index.html; this keeps things correct in dev/HMR and if that script is ever
@@ -81,12 +91,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }): Reac
       theme,
       setTheme: (next) => {
         persist(next)
+        beginThemeSwitch()
+        applyTheme(next)
         setThemeState(next)
       },
       toggleTheme: () => {
         setThemeState((prev) => {
           const next: ThemePreference = prev === 'dark' ? 'light' : 'dark'
           persist(next)
+          beginThemeSwitch()
+          applyTheme(next)
           return next
         })
       }

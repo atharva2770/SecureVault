@@ -109,7 +109,7 @@ function Modal({
       <div
         aria-hidden="true"
         onClick={closeOnBackdrop ? onClose : undefined}
-        className="absolute inset-0 bg-[var(--sv-overlay)] backdrop-blur-sm animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+        className="absolute inset-0 bg-[var(--sv-overlay)] backdrop-blur-sm animate-in fade-in-0 duration-med motion-reduce:animate-none"
       />
       <div
         ref={panelRef}
@@ -119,7 +119,7 @@ function Modal({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative z-10 w-full max-h-[min(100dvh-2rem,40rem)] overflow-y-auto rounded-[calc(var(--sv-radius)+4px)] border border-sv-border bg-sv-surface text-sv-text shadow-modal outline-none animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none',
+          'relative z-10 w-full max-h-[min(100dvh-2rem,40rem)] overflow-y-auto rounded-[calc(var(--sv-radius)+4px)] border border-sv-border bg-sv-surface text-sv-text shadow-modal outline-none animate-in fade-in-0 zoom-in-95 duration-med motion-reduce:animate-none',
           SIZES[size],
           className
         )}

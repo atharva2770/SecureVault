@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { File as FileIcon, Folder, Layers, Loader2, Search, X } from 'lucide-react'
+import { File as FileIcon, Folder, Layers, Search, X } from 'lucide-react'
 
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
 import { searchVault, totalResults } from '@/lib/search'
 import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { SearchRowSkeleton } from '@/components/ui/skeleton'
 
 const MIN_CHARS = 2
 const PER_SECTION = 5
@@ -109,21 +112,25 @@ export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): Re
           className="absolute top-[calc(100%+0.5rem)] left-0 z-50 max-h-[70vh] w-full overflow-y-auto rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface shadow-modal"
         >
           {query.isLoading ? (
-            <div className="flex items-center justify-center gap-2 p-6 text-sm text-sv-text-muted">
-              <Loader2 className="size-4 animate-spin" />
-              Searching…
+            <div aria-busy="true" aria-label="Searching" className="py-1.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <SearchRowSkeleton key={i} />
+              ))}
             </div>
           ) : query.isError ? (
-            <div className="p-6 text-sm text-sv-danger">
-              {(query.error as Error).message || 'Search failed.'}
-            </div>
+            <ErrorState
+              className="py-8"
+              title="Search didn’t finish"
+              description={(query.error as Error).message || 'Couldn’t look through the vault. Try again.'}
+              onRetry={() => void query.refetch()}
+            />
           ) : isEmpty ? (
-            <div className="p-6 text-center">
-              <p className="text-sm font-medium text-sv-text">No matches</p>
-              <p className="mt-1 text-xs text-sv-text-muted">
-                Nothing found for “{term}”.
-              </p>
-            </div>
+            <EmptyState
+              className="py-8"
+              icon={Search}
+              title="No matches"
+              description={`Nothing in the vault is named like “${term}”.`}
+            />
           ) : results ? (
             <div className="py-1.5">
               <ResultSection title="Modules" icon={Layers}>

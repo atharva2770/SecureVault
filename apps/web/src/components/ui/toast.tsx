@@ -53,7 +53,7 @@ function Toast({
       role="status"
       aria-live="polite"
       className={cn(
-        'pointer-events-auto flex w-full items-start gap-3 rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface-2 p-3 text-sv-text shadow-modal animate-in fade-in-0 slide-in-from-right-5 duration-200 motion-reduce:animate-none',
+        'pointer-events-auto flex w-full items-start gap-3 rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface-2 p-3 text-sv-text shadow-modal animate-in fade-in-0 slide-in-from-right-5 duration-fast motion-reduce:animate-none',
         className
       )}
     >

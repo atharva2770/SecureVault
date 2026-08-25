@@ -2,7 +2,8 @@ import { ChevronRight, Folder, FolderOpen, Layers } from 'lucide-react'
 import type { FolderDto } from '@securevault/domain'
 
 import { Card } from '@/components/ui/card'
-import { cn } from '@/lib/utils'
+import { EmptyState } from '@/components/ui/empty-state'
+import { SubfolderSkeleton } from '@/components/ui/skeleton'
 import type { ModuleTheme } from '@/theme/modules'
 
 /*
@@ -65,6 +66,7 @@ interface ModulePageProps {
   theme: ModuleTheme
   folderName: string
   subfolders: FolderDto[]
+  loading?: boolean
   onOpenFolder: (folder: FolderDto) => void
   /** Retrieve a file by name from a subfolder (name-verified retrieval). */
   onPickFile: (folder: FolderDto) => void
@@ -75,6 +77,7 @@ export function ModulePage({
   theme,
   folderName,
   subfolders,
+  loading = false,
   onOpenFolder,
   onPickFile,
   onBackToDashboard
@@ -143,7 +146,17 @@ export function ModulePage({
       </section>
 
       {/* Subfolder cards */}
-      {subfolders.length > 0 ? (
+      {loading ? (
+        <div
+          className="mt-5 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          aria-busy="true"
+          aria-label="Loading folders"
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SubfolderSkeleton key={i} />
+          ))}
+        </div>
+      ) : subfolders.length > 0 ? (
         <div className="mt-5 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {subfolders.map((folder) => (
             <Card key={folder.folderId} className="flex items-center gap-1 p-1.5">
@@ -179,9 +192,12 @@ export function ModulePage({
           ))}
         </div>
       ) : (
-        <p className={cn('mt-6 text-center text-sm text-sv-text-muted')}>
-          No subfolders in this module yet.
-        </p>
+        <EmptyState
+          className="mt-4"
+          icon={FolderOpen}
+          title="No folders in this module"
+          description="This module has no subfolders yet. Files at the module root appear below when they exist."
+        />
       )}
     </div>
   )

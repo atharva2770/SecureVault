@@ -146,6 +146,11 @@
 
   --tracking-display: -0.02em;
   --tracking-tightish: -0.01em;
+
+  /* Motion — two durations, one easing. Hover/press = fast; theme/page/modal = med. */
+  --ease-sv: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --duration-fast: 180ms;
+  --duration-med: 300ms;
 }
 
 /* ------------------------------ DARK (default) ------------------------------ */
@@ -168,6 +173,10 @@
   --sv-gutter: 1rem; /* 16px — card / list padding      */
   --sv-section: 1.5rem; /* 24px — between major sections    */
   --sv-page: 2rem; /* 32px — page frame padding        */
+
+  --sv-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sv-duration-fast: 180ms;
+  --sv-duration-med: 300ms;
 
   --bg-base: #0f1115;
   --bg-surface: #171a21;
@@ -355,6 +364,76 @@
   }
   50% {
     transform: translateY(-12px);
+  }
+}
+
+@keyframes sv-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes sv-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Skeleton shimmer — uses surface/accent tokens so it reads in both themes
+   (never generic #ccc). */
+.sv-skeleton {
+  background-color: var(--bg-elevated);
+  background-image: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in srgb, var(--accent-ink) 22%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: sv-shimmer 1.35s var(--sv-ease, ease) infinite;
+}
+
+.sv-page-enter {
+  animation: sv-page-in var(--sv-duration-med, 300ms) var(--sv-ease, ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-skeleton,
+  .sv-page-enter {
+    animation: none;
+  }
+}
+
+/* Smooth theme switch: only while ThemeProvider tags <html> as switching,
+   so hover/press stays on the fast duration. */
+html {
+  background-color: var(--bg-base);
+  transition:
+    background-color var(--sv-duration-med, 300ms) var(--sv-ease, ease),
+    color var(--sv-duration-med, 300ms) var(--sv-ease, ease);
+}
+
+html.theme-switching,
+html.theme-switching *:not(svg):not(path):not(canvas) {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow, outline-color,
+    caret-color;
+  transition-duration: var(--sv-duration-med, 300ms) !important;
+  transition-timing-function: var(--sv-ease, ease) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  html.theme-switching,
+  html.theme-switching * {
+    transition: none !important;
   }
 }
 

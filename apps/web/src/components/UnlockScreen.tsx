@@ -145,7 +145,7 @@ export default function UnlockScreen(): React.JSX.Element {
             {/* Scanning progress bar on submit */}
             <div
               aria-hidden="true"
-              className={`absolute inset-x-0 top-0 h-0.5 overflow-hidden transition-opacity duration-200 ${
+              className={`absolute inset-x-0 top-0 h-0.5 overflow-hidden transition-opacity duration-fast ${
                 pending ? 'opacity-100' : 'opacity-0'
               }`}
             >
