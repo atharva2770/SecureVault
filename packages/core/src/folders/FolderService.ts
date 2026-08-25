@@ -1,5 +1,5 @@
 import type { FileCategoryDto, FolderDto, FolderRights } from '@securevault/domain'
-import { EMPTY_RIGHTS } from '@securevault/domain'
+import { DEFAULT_VAULT_FOLDER_TREE, EMPTY_RIGHTS, traverseAncestorIds } from '@securevault/domain'
 import { AccessControlService } from '../access/AccessControlService'
 import { DBService } from '@securevault/db'
 
@@ -128,7 +128,9 @@ export class FolderService {
   }
 
   /**
-   * Lists shared folders the current user can VIEW (with rights on each DTO).
+   * Lists folders the current user can see in the tree.
+   * Granted folders keep full rights. Ancestors of a grant appear as a path only
+   * (no sibling folders, no files in the ancestor).
    */
   async listFolders(userId: string): Promise<FolderDto[]> {
     await this.ensureSharedCategoryRoots(userId)
@@ -138,11 +140,32 @@ export class FolderService {
       orderBy: [{ isCategoryRoot: 'desc' }, { name: 'asc' }]
     })
 
-    const result: FolderDto[] = []
+    const parentById = new Map(folders.map((f) => [f.folderId, f.parentFolderId]))
+    const grantedIds: string[] = []
+    const rightsById = new Map<string, FolderRights>()
+
     for (const folder of folders) {
       const rights = await this.acl.getEffectiveRights(folder.folderId, userId)
-      if (!rights.view) continue
-      result.push(toFolderDto(folder, rights))
+      rightsById.set(folder.folderId, rights)
+      if (rights.view) grantedIds.push(folder.folderId)
+    }
+
+    const grantedIdSet = new Set(grantedIds)
+    const traverseIds = traverseAncestorIds(grantedIds, parentById)
+    const traverseRights: FolderRights = {
+      view: true,
+      edit: false,
+      copy: false,
+      delete: false
+    }
+
+    const result: FolderDto[] = []
+    for (const folder of folders) {
+      if (grantedIdSet.has(folder.folderId)) {
+        result.push(toFolderDto(folder, rightsById.get(folder.folderId) ?? EMPTY_RIGHTS, false))
+      } else if (traverseIds.has(folder.folderId)) {
+        result.push(toFolderDto(folder, traverseRights, true))
+      }
     }
     return result
   }
@@ -187,7 +210,7 @@ export class FolderService {
     })
 
     const rights = await this.acl.getEffectiveRights(folder.folderId, userId)
-    return toFolderDto(folder, rights)
+    return toFolderDto(folder, rights, false)
   }
 
   async deleteFolder(userId: string, folderId: string): Promise<FolderDto> {
@@ -222,7 +245,7 @@ export class FolderService {
       data: { isDeleted: true }
     })
 
-    return toFolderDto(record, EMPTY_RIGHTS)
+    return toFolderDto(record, EMPTY_RIGHTS, false)
   }
 
   async getCategoryRootFolderId(userId: string, categoryId: string): Promise<string> {
@@ -249,6 +272,8 @@ export class FolderService {
    * Creator recorded on userId; access via FolderAcls.
    */
   private async ensureSharedCategoryRoots(userId: string): Promise<void> {
+    await this.ensureDefaultDepartmentCategories()
+
     const categories = await this.db.prisma.fileCategory.findMany({
       orderBy: { sortOrder: 'asc' }
     })
@@ -302,6 +327,81 @@ export class FolderService {
           }
         })
         this.acl.invalidateUser(userId)
+      } else if (root.name !== category.name) {
+        await this.db.prisma.folder.update({
+          where: { folderId: root.folderId },
+          data: { name: category.name }
+        })
+      }
+    }
+
+    await this.ensureDefaultDepartmentSubfolders()
+  }
+
+  /** Upserts HR, Engg, QA, and Accounts categories used as main vault folders. */
+  private async ensureDefaultDepartmentCategories(): Promise<void> {
+    for (const dept of DEFAULT_VAULT_FOLDER_TREE) {
+      const existing = await this.db.prisma.fileCategory.findUnique({
+        where: { code: dept.code }
+      })
+      if (!existing) {
+        await this.db.prisma.fileCategory.create({
+          data: {
+            code: dept.code,
+            name: dept.name,
+            sortOrder: dept.sortOrder,
+            isSystem: true
+          }
+        })
+        continue
+      }
+      if (existing.name !== dept.name) {
+        await this.db.prisma.fileCategory.update({
+          where: { categoryId: existing.categoryId },
+          data: { name: dept.name }
+        })
+      }
+    }
+  }
+
+  /** Creates the standard subfolders under each department root if they are missing. */
+  private async ensureDefaultDepartmentSubfolders(): Promise<void> {
+    for (const dept of DEFAULT_VAULT_FOLDER_TREE) {
+      const category = await this.db.prisma.fileCategory.findUnique({
+        where: { code: dept.code }
+      })
+      if (!category) continue
+
+      const root = await this.db.prisma.folder.findFirst({
+        where: {
+          categoryId: category.categoryId,
+          isCategoryRoot: true,
+          isDeleted: false
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+      if (!root) continue
+
+      const children = await this.db.prisma.folder.findMany({
+        where: {
+          parentFolderId: root.folderId,
+          isDeleted: false
+        },
+        select: { name: true }
+      })
+      const existingNames = new Set(children.map((child) => child.name.toLowerCase()))
+
+      for (const childName of dept.children) {
+        if (existingNames.has(childName.toLowerCase())) continue
+        await this.db.prisma.folder.create({
+          data: {
+            userId: root.userId,
+            categoryId: category.categoryId,
+            parentFolderId: root.folderId,
+            name: childName,
+            isCategoryRoot: false
+          }
+        })
       }
     }
   }
@@ -316,7 +416,8 @@ function toFolderDto(
     isCategoryRoot: boolean
     createdAt: Date
   },
-  rights: FolderRights
+  rights: FolderRights,
+  traverseOnly: boolean
 ): FolderDto {
   return {
     folderId: folder.folderId,
@@ -330,7 +431,8 @@ function toFolderDto(
       edit: rights.edit,
       copy: rights.copy,
       delete: rights.delete
-    }
+    },
+    traverseOnly
   }
 }
 

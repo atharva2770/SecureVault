@@ -164,6 +164,37 @@ export class AccessControlService {
     return allowed
   }
 
+  /**
+   * True when this folder has no content grant, but a descendant does.
+   * Used so the user can open the parent as a path without seeing its files or siblings.
+   */
+  async isAncestorOfGrantedFolder(folderId: string, userId: string): Promise<boolean> {
+    const identity = await this.loadIdentity(userId)
+    if (identity.roleCodes.includes(RoleCode.ADMIN)) return false
+
+    const folders = await this.prisma.folder.findMany({
+      where: { isDeleted: false },
+      select: { folderId: true, parentFolderId: true }
+    })
+    const childrenByParent = new Map<string, string[]>()
+    for (const folder of folders) {
+      if (!folder.parentFolderId) continue
+      const list = childrenByParent.get(folder.parentFolderId) ?? []
+      list.push(folder.folderId)
+      childrenByParent.set(folder.parentFolderId, list)
+    }
+
+    const stack = [...(childrenByParent.get(folderId) ?? [])]
+    while (stack.length) {
+      const id = stack.pop()!
+      const rights = await this.resolveEffectiveRights(userId, id)
+      if (rights.view) return true
+      const kids = childrenByParent.get(id)
+      if (kids) stack.push(...kids)
+    }
+    return false
+  }
+
   async getMyAccess(userId: string): Promise<MyAccessEntry[]> {
     const folders = await this.prisma.folder.findMany({
       where: { isDeleted: false },

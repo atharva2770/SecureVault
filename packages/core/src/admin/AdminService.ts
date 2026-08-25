@@ -7,6 +7,7 @@ import type {
   AdminUserDto,
   FolderAclDto,
   FolderDto,
+  FolderGrantDto,
   RoleDto,
   UserFolderAccessDto
 } from '@securevault/domain'
@@ -135,7 +136,9 @@ export class AdminService {
       await this.rbac.replaceRoles(user.userId, [roleCode], actorId)
 
       if (roleCode !== RoleCode.ADMIN) {
-        if (payload.folderIds?.length) {
+        if (payload.folderGrants?.length) {
+          await this.rbac.replaceUserFolderGrants(user.userId, payload.folderGrants, actorId)
+        } else if (payload.folderIds?.length) {
           await this.rbac.replaceUserFolderAccess(user.userId, payload.folderIds, actorId)
         } else if (payload.grantAllCategoryRoots) {
           await this.rbac.grantFullAccessOnCategoryRoots(user.userId, actorId)
@@ -411,14 +414,14 @@ export class AdminService {
     return {
       userId: targetId,
       isAdmin: await this.acl.isAdmin(targetId),
-      folderIds: await this.rbac.listUserFolderAccess(targetId)
+      grants: await this.rbac.listUserFolderGrants(targetId)
     }
   }
 
   async setUserFolderAccess(
     actorUserId: string,
     userId: string,
-    folderIds: string[]
+    grants: FolderGrantDto[]
   ): Promise<UserFolderAccessDto> {
     const actorId = await this.requireAdminOrManager(actorUserId, true)
     const targetId = userId?.trim()
@@ -427,11 +430,11 @@ export class AdminService {
     const user = await this.db.prisma.user.findUnique({ where: { userId: targetId } })
     if (!user) throw new Error('User not found.')
 
-    const granted = await this.rbac.replaceUserFolderAccess(targetId, folderIds, actorId)
+    const saved = await this.rbac.replaceUserFolderGrants(targetId, grants, actorId)
     await this.audit.write({
       action: AuditAction.ACL_GRANT,
       userId: actorId,
-      details: `setFolderAccess:${user.username}:${granted.length}`
+      details: `setFolderAccess:${user.username}:${saved.length}`
     })
 
     return this.getUserFolderAccess(actorId, targetId)

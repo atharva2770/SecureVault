@@ -2,7 +2,8 @@ import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, use
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, Plus, Shield, UserPlus, Users } from 'lucide-react'
 
-import type { AdminUserDto, UserFolderAccessDto } from '@securevault/domain'
+import type { AdminUserDto, FolderGrantDto, UserFolderAccessDto } from '@securevault/domain'
+import { folderGrantsEqual } from '@securevault/domain'
 import { api } from '@/api/vault'
 import { Button } from '@/components/ui/button'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -29,12 +30,6 @@ function roleLabel(user: AdminUserDto): string {
   return isAdminAccount(user) ? 'Admin' : 'Member'
 }
 
-function sameIdSet(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false
-  const other = new Set(b)
-  return a.every((id) => other.has(id))
-}
-
 export default function UsersPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<DraftKind>({ type: 'new' })
@@ -45,7 +40,7 @@ export default function UsersPage(): React.JSX.Element {
   const [newUsername, setNewUsername] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newIsAdmin, setNewIsAdmin] = useState(false)
-  const [newFolderIds, setNewFolderIds] = useState<string[]>([])
+  const [newGrants, setNewGrants] = useState<FolderGrantDto[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [persistPhase, setPersistPhase] = useState<PersistPhase>('idle')
@@ -53,9 +48,9 @@ export default function UsersPage(): React.JSX.Element {
   const selectedUserId = draft.type === 'user' ? draft.userId : null
   const selectedUserIdRef = useRef(selectedUserId)
   selectedUserIdRef.current = selectedUserId
-  const lastPersisted = useRef<{ userId: string; folderIds: string[] } | null>(null)
+  const lastPersisted = useRef<{ userId: string; grants: FolderGrantDto[] } | null>(null)
   const saveInFlight = useRef(false)
-  const saveQueued = useRef<{ userId: string; folderIds: string[] } | null>(null)
+  const saveQueued = useRef<{ userId: string; grants: FolderGrantDto[] } | null>(null)
 
   const setPhaseFor = useCallback((userId: string, phase: PersistPhase) => {
     if (selectedUserIdRef.current === userId) setPersistPhase(phase)
@@ -81,7 +76,7 @@ export default function UsersPage(): React.JSX.Element {
   const users = usersQuery.data ?? []
   const folders = foldersQuery.data ?? []
   const selectedUser = users.find((u) => u.userId === selectedUserId) ?? null
-  const folderIds = accessQuery.data?.folderIds ?? []
+  const grants = accessQuery.data?.grants ?? []
   const editIsAdmin = Boolean(
     accessQuery.data?.isAdmin || (selectedUser ? isAdminAccount(selectedUser) : false)
   )
@@ -92,9 +87,9 @@ export default function UsersPage(): React.JSX.Element {
     return users.filter((u) => u.username.toLowerCase().includes(q))
   }, [users, deferredSearch])
 
-  const persistFoldersNow = useCallback(
-    async (userId: string, nextIds: string[]) => {
-      saveQueued.current = { userId, folderIds: nextIds }
+  const persistGrantsNow = useCallback(
+    async (userId: string, nextGrants: FolderGrantDto[]) => {
+      saveQueued.current = { userId, grants: nextGrants }
       if (saveInFlight.current) return
       saveInFlight.current = true
 
@@ -104,23 +99,23 @@ export default function UsersPage(): React.JSX.Element {
           saveQueued.current = null
 
           const last = lastPersisted.current
-          if (last && last.userId === job.userId && sameIdSet(last.folderIds, job.folderIds)) {
+          if (last && last.userId === job.userId && folderGrantsEqual(last.grants, job.grants)) {
             setPhaseFor(job.userId, 'saved')
             continue
           }
 
           setPhaseFor(job.userId, 'saving')
           try {
-            const result = await api.admin.setUserFolderAccess(job.userId, job.folderIds)
+            const result = await api.admin.setUserFolderAccess(job.userId, job.grants)
             if (saveQueued.current) continue
-            lastPersisted.current = { userId: job.userId, folderIds: result.folderIds }
+            lastPersisted.current = { userId: job.userId, grants: result.grants }
             queryClient.setQueryData(accessKey(job.userId), result)
             setPhaseFor(job.userId, 'saved')
           } catch (err) {
             if (saveQueued.current) continue
             setPhaseFor(job.userId, 'error')
             if (selectedUserIdRef.current === job.userId) {
-              setError(err instanceof Error ? err.message : 'Could not save folders.')
+              setError(err instanceof Error ? err.message : 'Could not save folder rights.')
             }
             await queryClient.invalidateQueries({ queryKey: accessKey(job.userId) })
           }
@@ -132,7 +127,7 @@ export default function UsersPage(): React.JSX.Element {
     [queryClient, setPhaseFor]
   )
 
-  const persistFolders = useDebouncedCallback(persistFoldersNow, FOLDER_SAVE_DEBOUNCE_MS, {
+  const persistGrants = useDebouncedCallback(persistGrantsNow, FOLDER_SAVE_DEBOUNCE_MS, {
     flushOnUnmount: true
   })
 
@@ -148,13 +143,13 @@ export default function UsersPage(): React.JSX.Element {
         username: newUsername.trim(),
         password: newPassword,
         roleCode: newIsAdmin ? 'ADMIN' : 'MEMBER',
-        folderIds: newIsAdmin ? [] : newFolderIds
+        folderGrants: newIsAdmin ? [] : newGrants
       }),
     onSuccess: async (user) => {
       setNewUsername('')
       setNewPassword('')
       setNewIsAdmin(false)
-      setNewFolderIds([])
+      setNewGrants([])
       setStatus(`Created ${user.username}.`)
       setError(null)
       await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
@@ -193,7 +188,7 @@ export default function UsersPage(): React.JSX.Element {
       setStatus(
         isAdminAccount(user)
           ? `${user.username} is now an Admin and can open every folder.`
-          : `${user.username} is a Member. Tick the folders they may use.`
+          : `${user.username} is a Member. Set View / Edit / Copy / Delete on the folders they may use.`
       )
       setError(null)
       queryClient.setQueryData<AdminUserDto[]>(['admin', 'users'], (list) =>
@@ -238,23 +233,24 @@ export default function UsersPage(): React.JSX.Element {
     [queryClient]
   )
 
-  const applyFolderIds = useCallback(
-    (nextIds: string[]) => {
+  const applyGrants = useCallback(
+    (nextGrants: FolderGrantDto[]) => {
       if (!selectedUserId) return
       queryClient.setQueryData<UserFolderAccessDto>(accessKey(selectedUserId), (prev) => ({
         userId: selectedUserId,
         isAdmin: prev?.isAdmin ?? editIsAdmin,
-        folderIds: nextIds
+        grants: nextGrants
       }))
       setPersistPhase('pending')
       setError(null)
-      persistFolders(selectedUserId, nextIds)
+      persistGrants(selectedUserId, nextGrants)
     },
-    [editIsAdmin, persistFolders, queryClient, selectedUserId]
+    [editIsAdmin, persistGrants, queryClient, selectedUserId]
   )
 
   function openUser(user: AdminUserDto): void {
-    persistFolders.flush()
+    persistGrants.flush()
+    lastPersisted.current = null
     setStatus(null)
     setError(null)
     setPersistPhase('idle')
@@ -262,7 +258,7 @@ export default function UsersPage(): React.JSX.Element {
   }
 
   function startNew(): void {
-    persistFolders.flush()
+    persistGrants.flush()
     setStatus(null)
     setError(null)
     setPersistPhase('idle')
@@ -271,7 +267,7 @@ export default function UsersPage(): React.JSX.Element {
 
   function saveRole(nextAdmin: boolean): void {
     if (!selectedUser || nextAdmin === editIsAdmin) return
-    persistFolders.flush()
+    persistGrants.flush()
     void roleMutation.mutateAsync({ userId: selectedUser.userId, isAdmin: nextAdmin })
   }
 
@@ -282,7 +278,7 @@ export default function UsersPage(): React.JSX.Element {
     <PageShell
       wide
       title="People & folders"
-      subtitle="Pick a person, then tick the folders they may open. Ticked folders include everything inside them."
+      subtitle="Pick a person, then set View, Edit, Copy, Delete, and Subfolders for each folder."
     >
       {status || error ? (
         <p className={`mb-4 text-sm ${error ? 'text-sv-danger' : 'text-sv-text-muted'}`}>
@@ -363,7 +359,8 @@ export default function UsersPage(): React.JSX.Element {
                 <div>
                   <h2 className="text-lg font-semibold text-sv-text">New person</h2>
                   <p className="text-sm text-sv-text-muted">
-                    They sign in with this username and temporary password. Then tick folders below.
+                    They sign in with this username and temporary password. Then set folder rights
+                    below.
                   </p>
                 </div>
               </div>
@@ -399,24 +396,25 @@ export default function UsersPage(): React.JSX.Element {
               />
 
               <div className="mt-6">
-                <h3 className="mb-1 text-sm font-semibold text-sv-text">Folders they can use</h3>
+                <h3 className="mb-1 text-sm font-semibold text-sv-text">Folder rights</h3>
                 <p className="mb-3 text-xs text-sv-text-muted">
                   {newIsAdmin
-                    ? 'Admins automatically see every folder. You do not need to tick anything.'
-                    : 'Tick a folder to give them that folder. Subfolders are included automatically.'}
+                    ? 'Admins automatically have every right on every folder. You do not need to tick anything.'
+                    : 'View = read. Edit = upload and new folders. Copy = copy/download. Delete = delete/cut. Subfolders = inherit those rights inside the folder.'}
                 </p>
                 <FolderAccessPicker
                   folders={folders}
-                  selectedIds={newFolderIds}
-                  onChange={setNewFolderIds}
+                  grants={newGrants}
+                  onChange={setNewGrants}
                   lockedAll={newIsAdmin}
                   disabled={createMutation.isPending}
                 />
               </div>
 
-              {!newIsAdmin && newFolderIds.length === 0 ? (
+              {!newIsAdmin && newGrants.length === 0 ? (
                 <p className="mt-3 text-xs text-amber-400">
-                  No folders ticked — they will not see anything in My Vault until you tick at least one.
+                  No rights set — they will not see anything in My Vault until you tick at least
+                  View on one folder.
                 </p>
               ) : null}
 
@@ -479,31 +477,31 @@ export default function UsersPage(): React.JSX.Element {
               />
 
               <div className="mt-6">
-                <h3 className="mb-1 text-sm font-semibold text-sv-text">Folders they can use</h3>
+                <h3 className="mb-1 text-sm font-semibold text-sv-text">Folder rights</h3>
                 <p className="mb-3 text-xs text-sv-text-muted">
                   {editIsAdmin
-                    ? 'Admins can open every folder. Tick boxes are only used for members.'
-                    : 'Tick to give access. Untick to take it away. Saves a moment after you stop clicking.'}
+                    ? 'Admins can open every folder with full rights. These boxes are only used for members.'
+                    : 'Each column maps to FolderAcls (CanView, CanEdit, CanCopy, CanDelete, Inherit). Saves a moment after you stop clicking.'}
                 </p>
                 {showFolderSkeleton ? (
                   <div className="flex items-center gap-2 py-8 text-sm text-sv-text-muted">
                     <Loader2 className="size-4 animate-spin" />
-                    Loading folders…
+                    Loading folder rights…
                   </div>
                 ) : (
                   <FolderAccessPicker
                     folders={folders}
-                    selectedIds={folderIds}
-                    onChange={applyFolderIds}
+                    grants={grants}
+                    onChange={applyGrants}
                     lockedAll={editIsAdmin}
                     disabled={roleMutation.isPending}
                   />
                 )}
               </div>
 
-              {!editIsAdmin && !showFolderSkeleton && folderIds.length === 0 ? (
+              {!editIsAdmin && !showFolderSkeleton && grants.length === 0 ? (
                 <p className="mt-3 text-xs text-amber-400">
-                  No folders ticked — this person currently has no vault folders.
+                  No FolderAcls rows for this person — they currently have no vault folders.
                 </p>
               ) : null}
             </>
@@ -512,7 +510,8 @@ export default function UsersPage(): React.JSX.Element {
               <Shield className="mb-3 size-8 text-sv-text-muted" />
               <p className="text-sm font-medium text-sv-text">Select a person</p>
               <p className="mt-1 max-w-sm text-sm text-sv-text-muted">
-                Or add someone new, then tick the folders they should see.
+                Or add someone new, then set View / Edit / Copy / Delete on the folders they should
+                use.
               </p>
             </div>
           )}
@@ -567,7 +566,9 @@ function RoleCards({
           )}
         >
           <p className="text-sm font-semibold text-sv-text">Member</p>
-          <p className="mt-0.5 text-xs text-sv-text-muted">Only the folders you tick below.</p>
+          <p className="mt-0.5 text-xs text-sv-text-muted">
+            Only the folder rights you set below.
+          </p>
         </button>
         <button
           type="button"

@@ -23,7 +23,12 @@ export class FileQueryService {
 
   async listFiles(userId: string, filter: ListFilesFilter = {}): Promise<FileDto[]> {
     if (filter.folderId) {
-      await this.acl.require(filter.folderId, 'view', userId)
+      const rights = await this.acl.getEffectiveRights(filter.folderId, userId)
+      if (!rights.view) {
+        const pathOnly = await this.acl.isAncestorOfGrantedFolder(filter.folderId, userId)
+        if (pathOnly) return []
+        await this.acl.require(filter.folderId, 'view', userId)
+      }
     }
 
     const where: {

@@ -11,7 +11,7 @@ This repository is an **npm workspace**. The desktop Electron app still talks ov
 - **Encrypted file vault** — streaming AES-256-GCM encryption with per-file Data Encryption Keys (DEKs)
 - **Master vault unlock** — Argon2id key derivation; master key (KEK) held in memory only while unlocked
 - **Per-file access password** — additional gate before open or download
-- **Category-based organization** — Railway Tender, Defence Tender, HR, Engineering, NPD, and custom categories
+- **Category-based organization** — HR, Engg, QA, Accounts (with standard subfolders), plus any extra categories you add
 - **Folder hierarchy** — nested folders with breadcrumb navigation, search, drag-and-drop upload
 - **RBAC & folder ACLs** — Admin, Manager, Member, and Viewer roles with view / edit / copy / delete rights
 - **Admin panel** — user provisioning, role assignment, folder ACL management
@@ -151,18 +151,22 @@ npm run db:generate
 ### 5. Start the desktop app
 
 ```bash
-npm run desktop
+npm start
 ```
 
 The Electron window opens. The **first registered user** automatically receives the **Admin** role.
 
+(`npm run desktop` does the same thing.)
+
 ### 6. Start the web app
 
 ```bash
-npm run web
+npm run dev
 ```
 
 This starts the API on port **4000** and the React UI on **http://localhost:5173**, and opens the browser. Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
+
+(`npm run web` does the same thing.)
 
 To run the UI only (API already running):
 
@@ -176,13 +180,14 @@ npm run dev:web
 
 | Command | Description |
 | --- | --- |
-| `npm run desktop` | Open the **desktop** Electron app |
-| `npm run web` | Open the **web** app (API + UI, browser) |
-| `npm run dev` | Same as `npm run desktop` |
+| `npm start` | Open the **desktop** Electron app |
+| `npm run dev` | Open the **web** app (API + UI, browser) |
+| `npm run desktop` | Same as `npm start` |
+| `npm run web` | Same as `npm run dev` |
 | `npm run dev:api` | Start only the local API on http://127.0.0.1:4000 |
 | `npm run dev:web` | Start only the React UI on http://localhost:5173 |
 | `npm run build` | Typecheck and build the desktop app |
-| `npm run start` | Preview the production desktop build |
+| `npm run preview` | Preview the production desktop build |
 | `npm run build:win` | Build Windows installer (NSIS) |
 | `npm run build:mac` | Build macOS DMG |
 | `npm run build:linux` | Build Linux AppImage / deb |
@@ -274,7 +279,7 @@ Core tables include:
 - **Phase 2 (done)** — local Fastify API on port 4000; session cookie auth; folders/files list/admin ACL JSON; same SQL Server
 - **Phase 3 (done)** — encrypted blobs + local KMS wrapping; streaming upload/download; per-file password verified on the API
 - **Phase 4 (done)** — web UI (Unlock, VaultBrowser, Admin) over HTTP on port 5173
-- **Phase 5 (done)** — desktop and web are separate apps. `npm run desktop` is Electron/IPC; `npm run web` is the browser UI + API. Set `DESKTOP_USE_WEB_UI=true` only if Electron should wrap the web UI
+- **Phase 5 (done)** — desktop and web are separate apps. `npm start` is Electron/IPC; `npm run dev` is the browser UI + API. Set `DESKTOP_USE_WEB_UI=true` only if Electron should wrap the web UI
 
 ---
 
@@ -285,7 +290,7 @@ Core tables include:
 | `Missing DATABASE_URL` | Create `.env` from `.env.example` and set the connection string |
 | `VAULT_KMS_WRAP_KEY must be 64 hex characters` | Set a 32-byte wrap key in `.env` (see `.env.example`) |
 | Migration fails | Database exists, SQL Server is running, credentials are correct |
-| `Preload bridge unavailable` | Fully quit the app and run `npm run dev` again |
+| `Preload bridge unavailable` | Fully quit the app and run `npm start` again |
 | Move/Copy unavailable | Restart dev mode so the preload script reloads |
 | Login works but no folders | Run migrations; ensure category seed migration applied |
 

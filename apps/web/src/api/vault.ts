@@ -13,6 +13,7 @@ import type {
   FileDto,
   FolderAclDto,
   FolderDto,
+  FolderGrantDto,
   GetFileResult,
   ListFilesFilter,
   LoginPayload,
@@ -242,10 +243,10 @@ export const api = {
       json<FolderAclDto[]>(`/api/admin/folders/${folderId}/acls`),
     getUserFolderAccess: (userId: string) =>
       json<UserFolderAccessDto>(`/api/admin/users/${userId}/folder-access`),
-    setUserFolderAccess: (userId: string, folderIds: string[]) =>
+    setUserFolderAccess: (userId: string, grants: FolderGrantDto[]) =>
       json<UserFolderAccessDto>(`/api/admin/users/${userId}/folder-access`, {
         method: 'PUT',
-        ...jsonBody({ folderIds })
+        ...jsonBody({ grants })
       }),
     setFolderAcl: (payload: AdminSetFolderAclPayload) =>
       json<FolderAclDto[]>(`/api/admin/folders/${payload.folderId}/acls`, {

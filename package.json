@@ -8,13 +8,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run desktop",
+    "start": "npm run desktop",
+    "dev": "npm run web",
     "desktop": "npm run dev -w @securevault/desktop",
     "web": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:open -w @securevault/web\"",
     "dev:desktop": "npm run desktop",
     "dev:api": "npm run dev -w @securevault/api",
     "dev:web": "npm run dev -w @securevault/web",
-    "start": "npm run start -w @securevault/desktop",
+    "preview": "npm run start -w @securevault/desktop",
     "build": "npm run build -w @securevault/desktop",
     "build:win": "npm run build:win -w @securevault/desktop",
     "build:mac": "npm run build:mac -w @securevault/desktop",

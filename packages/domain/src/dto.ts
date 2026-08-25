@@ -79,6 +79,10 @@ export interface FolderDto {
     copy: boolean
     delete: boolean
   }
+  /**
+   * Shown only as a path to a granted child. No files, siblings, or write access here.
+   */
+  traverseOnly?: boolean
 }
 
 export interface FolderRightsDto {
@@ -185,13 +189,25 @@ export interface FolderAclDto {
   grantedAt: string
 }
 
+/** One FolderAcls row for a user (CRUD + inherit). */
+export interface FolderGrantDto {
+  folderId: string
+  canView: boolean
+  canEdit: boolean
+  canCopy: boolean
+  canDelete: boolean
+  inherit: boolean
+}
+
 export interface AdminCreateUserPayload {
   username: string
   password: string
   roleCode: string
   /** If true, grants full rights on all category roots. */
   grantAllCategoryRoots?: boolean
-  /** Folders to grant (full use + subfolders). Ignored for Admin. */
+  /** Explicit FolderAcls rows (View/Edit/Copy/Delete/Inherit). Ignored for Admin. */
+  folderGrants?: FolderGrantDto[]
+  /** @deprecated Prefer folderGrants. Maps to full CRUD + inherit on each id. */
   folderIds?: string[]
 }
 
@@ -211,11 +227,11 @@ export interface AdminSetFolderAclPayload {
   inherit?: boolean
 }
 
-/** Simple checkbox access: these folders (and their subfolders) are open to the user. */
+/** Folder access loaded from FolderAcls for one user. */
 export interface UserFolderAccessDto {
   userId: string
   isAdmin: boolean
-  folderIds: string[]
+  grants: FolderGrantDto[]
 }
 
 export interface MyAccessEntryDto {

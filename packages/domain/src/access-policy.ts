@@ -86,3 +86,28 @@ export function resolveFolderRightsPure(input: {
   if (!acl.view) return EMPTY_RIGHTS
   return acl
 }
+
+/**
+ * Ancestors of granted folders that must appear in the tree so the user can walk
+ * to a shared child. Does not grant file access on those ancestors; siblings stay hidden.
+ */
+export function traverseAncestorIds(
+  grantedFolderIds: Iterable<string>,
+  parentById: Map<string, string | null>
+): Set<string> {
+  const granted = new Set(grantedFolderIds)
+  const traverse = new Set<string>()
+
+  for (const id of granted) {
+    let parentId = parentById.get(id) ?? null
+    const seen = new Set<string>()
+    while (parentId && !seen.has(parentId)) {
+      seen.add(parentId)
+      if (granted.has(parentId)) break
+      traverse.add(parentId)
+      parentId = parentById.get(parentId) ?? null
+    }
+  }
+
+  return traverse
+}

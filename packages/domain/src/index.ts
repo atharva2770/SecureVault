@@ -15,8 +15,18 @@ export type {
   FolderRights
 } from './rbac'
 
-export { resolveFolderRightsPure } from './access-policy'
+export { resolveFolderRightsPure, traverseAncestorIds } from './access-policy'
 export type { AccessPrincipalType, AccessGrant } from './access-policy'
+
+export {
+  FULL_FOLDER_GRANT,
+  normalizeFolderGrant,
+  normalizeFolderGrants,
+  folderGrantsEqual
+} from './folder-grant'
+
+export { DEFAULT_VAULT_FOLDER_TREE } from './default-folders'
+export type { DefaultFolderTreeNode } from './default-folders'
 
 export type {
   AuthUserDto,
@@ -42,6 +52,7 @@ export type {
   AdminUserDto,
   RoleDto,
   FolderAclDto,
+  FolderGrantDto,
   AdminCreateUserPayload,
   AdminSetUserRolesPayload,
   AdminSetFolderAclPayload,

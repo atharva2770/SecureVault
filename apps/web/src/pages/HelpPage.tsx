@@ -27,9 +27,10 @@ export default function HelpPage(): React.JSX.Element {
         <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5">
           <h2 className="mb-2 text-sm font-semibold text-sv-text">Roles and folders</h2>
           <p className="text-sm leading-6 text-sv-text-muted">
-            Admins open People & folders from the profile menu. Tick a folder to give that person
-            access (including everything inside it). Admins can open every folder automatically.
-            Idle time locks the vault.
+            Admins open People & folders from the profile menu. For each folder, set View, Edit,
+            Copy, Delete, and whether those rights inherit to subfolders. Those flags are stored in
+            FolderAcls and enforced when the person opens the vault. Admins can open every folder
+            automatically. Idle time locks the vault.
           </p>
         </section>
       </div>

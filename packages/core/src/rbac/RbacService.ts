@@ -1,5 +1,10 @@
 import { DBService, type PrismaClient } from '@securevault/db'
-import { RoleCode } from '@securevault/domain'
+import {
+  FULL_FOLDER_GRANT,
+  RoleCode,
+  normalizeFolderGrants,
+  type FolderGrantDto
+} from '@securevault/domain'
 
 import { AccessControlService } from '../access/AccessControlService'
 
@@ -128,48 +133,77 @@ export class RbacService {
     this.acl.invalidateUser(userId)
   }
 
-  async listUserFolderAccess(userId: string): Promise<string[]> {
+  async listUserFolderGrants(userId: string): Promise<FolderGrantDto[]> {
     const rows = await this.prisma.folderAcl.findMany({
       where: { principalType: 'USER', principalId: userId },
-      select: { folderId: true }
+      select: {
+        folderId: true,
+        canView: true,
+        canEdit: true,
+        canCopy: true,
+        canDelete: true,
+        inherit: true
+      }
     })
-    return rows.map((r) => r.folderId)
+    return normalizeFolderGrants(rows)
   }
 
   /**
-   * Replaces this user's folder checkboxes: each id gets full use of that folder and its subfolders.
+   * Replaces this user's FolderAcls rows. Empty / no-view grants are omitted (row deleted).
+   */
+  async replaceUserFolderGrants(
+    userId: string,
+    grants: FolderGrantDto[],
+    grantedBy?: string | null
+  ): Promise<FolderGrantDto[]> {
+    const normalized = normalizeFolderGrants(grants)
+    const uniqueIds = normalized.map((g) => g.folderId)
+    const folders = uniqueIds.length
+      ? await this.prisma.folder.findMany({
+          where: { folderId: { in: uniqueIds }, isDeleted: false },
+          select: { folderId: true }
+        })
+      : []
+    const valid = new Set(folders.map((f) => f.folderId))
+    const kept = normalized.filter((g) => valid.has(g.folderId))
+
+    await this.prisma.folderAcl.deleteMany({
+      where: { principalType: 'USER', principalId: userId }
+    })
+
+    for (const grant of kept) {
+      await this.upsertUserFolderAcl(grant.folderId, userId, {
+        canView: grant.canView,
+        canEdit: grant.canEdit,
+        canCopy: grant.canCopy,
+        canDelete: grant.canDelete,
+        inherit: grant.inherit,
+        grantedBy: grantedBy ?? null
+      })
+    }
+
+    this.acl.invalidateUser(userId)
+    return kept
+  }
+
+  async listUserFolderAccess(userId: string): Promise<string[]> {
+    return (await this.listUserFolderGrants(userId)).map((g) => g.folderId)
+  }
+
+  /**
+   * @deprecated Prefer replaceUserFolderGrants. Full CRUD + inherit on each folder id.
    */
   async replaceUserFolderAccess(
     userId: string,
     folderIds: string[],
     grantedBy?: string | null
   ): Promise<string[]> {
-    const unique = [...new Set(folderIds.map((id) => id.trim()).filter(Boolean))]
-    const folders = unique.length
-      ? await this.prisma.folder.findMany({
-          where: { folderId: { in: unique }, isDeleted: false },
-          select: { folderId: true }
-        })
-      : []
-    const validIds = folders.map((f) => f.folderId)
-
-    await this.prisma.folderAcl.deleteMany({
-      where: { principalType: 'USER', principalId: userId }
-    })
-
-    for (const folderId of validIds) {
-      await this.upsertUserFolderAcl(folderId, userId, {
-        canView: true,
-        canEdit: true,
-        canCopy: true,
-        canDelete: true,
-        inherit: true,
-        grantedBy: grantedBy ?? null
-      })
-    }
-
-    this.acl.invalidateUser(userId)
-    return validIds
+    const grants = await this.replaceUserFolderGrants(
+      userId,
+      folderIds.map((folderId) => ({ folderId, ...FULL_FOLDER_GRANT })),
+      grantedBy
+    )
+    return grants.map((g) => g.folderId)
   }
 
   async upsertUserFolderAcl(

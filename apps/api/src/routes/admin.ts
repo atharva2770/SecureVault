@@ -24,13 +24,31 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
         roleCode?: string
         grantAllCategoryRoots?: boolean
         folderIds?: string[]
+        folderGrants?: Array<{
+          folderId?: string
+          canView?: boolean
+          canEdit?: boolean
+          canCopy?: boolean
+          canDelete?: boolean
+          inherit?: boolean
+        }>
       }
       return await admin.createUser(session.userId, {
         username: body.username ?? '',
         password: body.password ?? '',
         roleCode: body.roleCode ?? 'MEMBER',
         grantAllCategoryRoots: body.grantAllCategoryRoots,
-        folderIds: Array.isArray(body.folderIds) ? body.folderIds : undefined
+        folderIds: Array.isArray(body.folderIds) ? body.folderIds : undefined,
+        folderGrants: Array.isArray(body.folderGrants)
+          ? body.folderGrants.map((g) => ({
+              folderId: g.folderId ?? '',
+              canView: Boolean(g.canView),
+              canEdit: Boolean(g.canEdit),
+              canCopy: Boolean(g.canCopy),
+              canDelete: Boolean(g.canDelete),
+              inherit: g.inherit !== false
+            }))
+          : undefined
       })
     } catch (error) {
       return sendError(reply, error)
@@ -76,8 +94,35 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     try {
       const session = requireSession(request)
       const { userId } = request.params as { userId: string }
-      const body = (request.body ?? {}) as { folderIds?: string[] }
-      return await admin.setUserFolderAccess(session.userId, userId, body.folderIds ?? [])
+      const body = (request.body ?? {}) as {
+        grants?: Array<{
+          folderId?: string
+          canView?: boolean
+          canEdit?: boolean
+          canCopy?: boolean
+          canDelete?: boolean
+          inherit?: boolean
+        }>
+        folderIds?: string[]
+      }
+      const grants = Array.isArray(body.grants)
+        ? body.grants.map((g) => ({
+            folderId: g.folderId ?? '',
+            canView: Boolean(g.canView),
+            canEdit: Boolean(g.canEdit),
+            canCopy: Boolean(g.canCopy),
+            canDelete: Boolean(g.canDelete),
+            inherit: g.inherit !== false
+          }))
+        : (body.folderIds ?? []).map((folderId) => ({
+            folderId,
+            canView: true,
+            canEdit: true,
+            canCopy: true,
+            canDelete: true,
+            inherit: true
+          }))
+      return await admin.setUserFolderAccess(session.userId, userId, grants)
     } catch (error) {
       return sendError(reply, error)
     }

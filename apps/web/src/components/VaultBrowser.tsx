@@ -1194,6 +1194,13 @@ export default function VaultBrowser(): React.JSX.Element {
               </p>
             ) : null}
 
+            {selectedFolder?.traverseOnly && !isSearching ? (
+              <p className="px-3 py-2 text-xs text-sv-text-muted sm:px-4">
+                You can open this folder to reach folders you have access to. Files and other
+                subfolders here stay hidden.
+              </p>
+            ) : null}
+
             {loading ? (
               <div className="flex h-40 items-center justify-center gap-2 text-sv-text-muted">
                 <Loader2 className="size-5 animate-spin" />
