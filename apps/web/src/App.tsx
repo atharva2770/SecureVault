@@ -57,7 +57,7 @@ export default function App(): React.JSX.Element {
                 >
                   <Route element={<VaultPage />}>
                     <Route index element={null} />
-                    <Route path="m/:folderId" element={null} />
+                    <Route path="m/*" element={null} />
                   </Route>
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/account/password" element={<ChangePasswordPage />} />

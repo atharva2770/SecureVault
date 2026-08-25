@@ -32,11 +32,11 @@ Motion tokens used everywhere below: `--duration-fast` (180ms, hover/press), `--
 
 | Check | Dark | Light | Notes |
 |---|---|---|---|
-| Hero pattern | Pass | Pass | `--card-pattern-strength` 16% dark / 26% light |
+| Hero pattern | Pass | Pass | SVG primitives; opacity 24% / 40%, stroke 0.75 / 1.05px, glow 26% / 17% |
 | Breadcrumb | Pass | Pass | Muted → primary; 44px hit on mobile |
 | Subfolder cards | Pass | Pass | Same radius as dashboard cards |
 | Subfolder skeletons | Pass | Pass | Match card shape (icon + two lines) |
-| Remaining | — | Watch | Hero wash at 14% accent can look faint on light for `--mod-other` |
+| Remaining | — | Watch | `--mod-other` glow is quieter than saturated modules; the dot-grid carries identity |
 
 ## File retrieve modal
 

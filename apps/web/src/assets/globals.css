@@ -318,15 +318,138 @@
   }
 }
 
-/* Per-module hero pattern strength — patterns tuned for near-black read too
-   faintly on white, so light mode mixes more of the accent into the pattern.
-   `--card-accent` / `--card-accent-soft` are set inline per module. */
+/* App-shell ambient surface — a calm "vault / control-panel" depth layer sat
+   behind the dashboard grid and admin pages. Gradients + a masked CSS dot-grid
+   only (no raster imagery). Dark leans on a soft accent glow; light drops the
+   opacity hard and shifts to a near-neutral tint so real card shadows carry the
+   depth instead. */
+.app-ambient-mesh {
+  background:
+    radial-gradient(
+      62% 52% at 12% -4%,
+      color-mix(in srgb, var(--accent-ink) 13%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      48% 44% at 92% 4%,
+      color-mix(in srgb, var(--accent-2) 9%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      90% 70% at 50% 118%,
+      color-mix(in srgb, var(--accent-ink) 7%, transparent),
+      transparent 72%
+    );
+}
+
+.app-ambient-dots {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--text-primary) 9%, transparent) 1px,
+    transparent 1.6px
+  );
+  background-size: 26px 26px;
+  opacity: 0.55;
+  mask-image: radial-gradient(135% 100% at 50% -10%, #000 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(135% 100% at 50% -10%, #000 0%, transparent 70%);
+}
+
+[data-theme='light'] .app-ambient-mesh {
+  background:
+    radial-gradient(
+      62% 52% at 12% -4%,
+      color-mix(in srgb, var(--accent-ink) 5%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      48% 44% at 92% 4%,
+      color-mix(in srgb, var(--accent-2) 3.5%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      95% 75% at 50% 120%,
+      color-mix(in srgb, var(--text-primary) 3.5%, transparent),
+      transparent 74%
+    );
+}
+
+[data-theme='light'] .app-ambient-dots {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--text-primary) 6%, transparent) 1px,
+    transparent 1.6px
+  );
+  opacity: 0.35;
+}
+
+/* Module identity — glow, pattern, and scrim. `--card-accent` is set inline
+   from the module theme; everything else is theme-tuned here so the same SVG
+   primitives hold contrast on navy and on white. */
 .module-hero {
-  --card-pattern-strength: 16%;
+  --card-accent: var(--accent-ink);
+  --module-glow-strength: 26%;
+  --module-pattern-opacity: 0.24;
+  --module-pattern-stroke: 0.75px;
+  --module-scrim-a: 82%;
+  --module-scrim-b: 38%;
+  --card-accent-soft: color-mix(
+    in srgb,
+    var(--card-accent) var(--module-glow-strength),
+    transparent
+  );
 }
 
 [data-theme='light'] .module-hero {
-  --card-pattern-strength: 26%;
+  --module-glow-strength: 17%;
+  --module-pattern-opacity: 0.4;
+  --module-pattern-stroke: 1.05px;
+  --module-scrim-a: 92%;
+  --module-scrim-b: 58%;
+}
+
+.module-hero-glow {
+  background: radial-gradient(125% 140% at 0% 0%, var(--card-accent-soft), transparent 58%);
+}
+
+.module-hero-pattern {
+  contain: paint;
+  opacity: var(--module-pattern-opacity);
+  mask-image: linear-gradient(175deg, #000 16%, transparent 88%);
+  -webkit-mask-image: linear-gradient(175deg, #000 16%, transparent 88%);
+}
+
+.module-hero-pattern-svg {
+  display: block;
+  color: var(--card-accent);
+  stroke-width: var(--module-pattern-stroke);
+}
+
+.module-hero-pattern-shift {
+  animation: sv-module-drift 80s linear infinite;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+}
+
+/* Pause the ambient drift while the theme is interpolating so the compositor
+   can spend its budget on the whole-tree colour transition — this is what
+   keeps the light↔dark toggle smooth on the module pages. */
+html.theme-switching .module-hero-pattern-shift {
+  animation-play-state: paused;
+}
+
+.module-hero-edge {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--card-accent) 48%, transparent),
+    transparent 72%
+  );
+}
+
+.module-hero-scrim {
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--bg-surface) var(--module-scrim-a), transparent) 0%,
+    color-mix(in srgb, var(--bg-surface) var(--module-scrim-b), transparent) 46%,
+    transparent 76%
+  );
 }
 
 .titlebar-drag {
@@ -354,6 +477,19 @@
   }
   to {
     background-position: 44px 44px;
+  }
+}
+
+@keyframes sv-module-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(
+      calc(-1 * var(--module-pattern-dx, 48px)),
+      calc(-1 * var(--module-pattern-dy, 24px)),
+      0
+    );
   }
 }
 
@@ -407,8 +543,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sv-skeleton,
-  .sv-page-enter {
+  .sv-page-enter,
+  .module-hero-pattern-shift {
     animation: none;
+    will-change: auto;
   }
 }
 

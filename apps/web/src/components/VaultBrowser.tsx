@@ -64,15 +64,57 @@ type Selection =
   | { type: 'root' }
   | { type: 'folder'; folderId: string; categoryId: string | null }
 
-function categoryRootOf(folder: FolderDto, folders: FolderDto[]): FolderDto | null {
-  if (folder.isCategoryRoot) return folder
-  const byId = new Map(folders.map((f) => [f.folderId, f]))
-  let cur: FolderDto | undefined = folder
-  while (cur) {
-    if (cur.isCategoryRoot) return cur
-    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined
+/*
+  URL addressing is name-based, never the DB folder id. A folder's location is
+  encoded as its breadcrumb chain of slugs (module → subfolder → …), e.g.
+  `/m/qa/action-plan`. The real folderId stays server-side / in memory; it is
+  never exposed in the address bar. Slugs are resolved back to a folder against
+  the already-loaded tree, so no extra API calls are needed.
+*/
+function slugifyName(name: string): string {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'folder'
+}
+
+function parsePathSegments(routePath: string | undefined): string[] {
+  if (!routePath) return []
+  return routePath
+    .split('/')
+    .map((s) => decodeURIComponent(s).trim().toLowerCase())
+    .filter(Boolean)
+}
+
+/** Slug path (module-rooted) for a folder, used to build the address bar URL. */
+function folderSlugPath(folderId: string, folders: FolderDto[]): string {
+  const crumbs = buildBreadcrumbs(folderId, folders)
+  if (crumbs.length === 0) return '/'
+  return `/m/${crumbs.map((c) => slugifyName(c.name)).join('/')}`
+}
+
+/**
+ * Walk name-slug segments down the tree and return the deepest folder that
+ * resolves. Partial matches resolve as far as they can (a renamed leaf falls
+ * back to its nearest surviving ancestor), and unknown roots resolve to null.
+ */
+function resolveSlugSegments(segments: string[], folders: FolderDto[]): FolderDto | null {
+  if (segments.length === 0) return null
+  let current =
+    folders.find((f) => f.isCategoryRoot && slugifyName(f.name) === segments[0]) ?? null
+  if (!current) return null
+  for (let i = 1; i < segments.length; i += 1) {
+    const next = folders.find(
+      (f) => f.parentFolderId === current!.folderId && slugifyName(f.name) === segments[i]
+    )
+    if (!next) break
+    current = next
   }
-  return folders.find((f) => f.isCategoryRoot && f.categoryId === folder.categoryId) ?? null
+  return current
 }
 
 function syncVaultRoute(
@@ -87,8 +129,7 @@ function syncVaultRoute(
   }
   const folder = folders.find((f) => f.folderId === next.folderId)
   if (!folder) return
-  const root = categoryRootOf(folder, folders)
-  const path = `/m/${(root ?? folder).folderId}`
+  const path = folderSlugPath(folder.folderId, folders)
   if (pathname !== path) go(path)
 }
 
@@ -275,7 +316,8 @@ export default function VaultBrowser(): React.JSX.Element {
   const { isAdmin } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { folderId: routeModuleId } = useParams()
+  const params = useParams()
+  const routeSlugPath = params['*'] ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
   const [selection, setSelection] = useState<Selection>({ type: 'root' })
   const [fileNameFolder, setFileNameFolder] = useState<FolderDto | null>(null)
@@ -321,30 +363,21 @@ export default function VaultBrowser(): React.JSX.Element {
   const folders = sidebarQuery.data?.folders ?? []
 
   useEffect(() => {
-    if (!routeModuleId) {
+    const segments = parsePathSegments(routeSlugPath)
+    if (segments.length === 0) {
       setSelection((prev) => (prev.type === 'root' ? prev : { type: 'root' }))
       return
     }
-    const moduleFolder = folders.find((f) => f.folderId === routeModuleId)
-    if (!moduleFolder) return
-    setSelection((prev) => {
-      if (prev.type === 'folder') {
-        const current = folders.find((f) => f.folderId === prev.folderId)
-        if (
-          current &&
-          (current.folderId === moduleFolder.folderId ||
-            current.categoryId === moduleFolder.categoryId)
-        ) {
-          return prev
-        }
-      }
-      return {
-        type: 'folder',
-        folderId: moduleFolder.folderId,
-        categoryId: moduleFolder.categoryId
-      }
-    })
-  }, [routeModuleId, folders])
+    // Wait for the tree before trying to resolve a deep link on first paint.
+    if (folders.length === 0) return
+    const target = resolveSlugSegments(segments, folders)
+    if (!target) return
+    setSelection((prev) =>
+      prev.type === 'folder' && prev.folderId === target.folderId
+        ? prev
+        : { type: 'folder', folderId: target.folderId, categoryId: target.categoryId }
+    )
+  }, [routeSlugPath, folders])
 
   const filesQuery = useQuery({
     queryKey: ['files', selection],

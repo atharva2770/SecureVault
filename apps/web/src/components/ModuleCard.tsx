@@ -1,31 +1,9 @@
-import {
-  CheckCircle2,
-  Folder,
-  Layers,
-  Lightbulb,
-  Lock,
-  ShieldHalf,
-  Train,
-  Users,
-  Wallet,
-  Wrench,
-  type LucideIcon
-} from 'lucide-react'
+import { Folder, Lock } from 'lucide-react'
 
+import { moduleIcon } from '@/components/module-icons'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-
-const MODULE_ICON: Record<string, LucideIcon> = {
-  accounts: Wallet,
-  defence: ShieldHalf,
-  engineering: Wrench,
-  hr: Users,
-  npd: Lightbulb,
-  other: Layers,
-  qa: CheckCircle2,
-  railway: Train
-}
 
 export interface ModuleCardProps {
   moduleId: string
@@ -49,7 +27,7 @@ export function ModuleCard({
   restricted = false,
   onOpen
 }: ModuleCardProps): React.JSX.Element {
-  const Icon = MODULE_ICON[moduleId] ?? Folder
+  const Icon = moduleIcon(moduleId)
   const interactive = !locked && Boolean(onOpen)
 
   return (
@@ -57,7 +35,7 @@ export function ModuleCard({
       className={cn(
         'group relative overflow-hidden shadow-card outline-none transition-all duration-fast ease-sv motion-reduce:transition-none',
         interactive &&
-          'cursor-pointer hover:-translate-y-1 hover:shadow-modal focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:hover:translate-y-0',
+          'cursor-pointer hover:-translate-y-1 hover:scale-[1.02] hover:shadow-modal focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:hover:translate-y-0 motion-reduce:hover:scale-100',
         locked && 'select-none'
       )}
       role={interactive ? 'button' : undefined}
