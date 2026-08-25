@@ -2,31 +2,73 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
-@custom-variant light (&:is(.light *));
+@custom-variant dark (&:is([data-theme='dark'] *));
+@custom-variant light (&:is([data-theme='light'] *));
 
 /*
-  Section 10 — Design tokens (dark-first, with light mode)
+  ============================================================================
+  DOCMAN — Design tokens (dark-first, purpose-built light theme)
+  ----------------------------------------------------------------------------
+  Themes are toggled by ThemeProvider via `.dark` / `.light` classes on <html>.
+  Light overrides also match `[data-theme='light']` so either convention works.
+  All theme-dependent values are consumed through `@theme inline`, so Tailwind
+  utilities (bg-sv-*, text-sv-*, shadow-card, font-mono, …) resolve live per
+  theme instead of being frozen at build time.
 
-  | Token             | Dark      | Light     | Use                          |
-  |-------------------|-----------|-----------|------------------------------|
-  | --bg-base         | #0F1115   | #FAFAFA   | App background               |
-  | --bg-surface      | #171A21   | #FFFFFF   | Cards, panels, sidebar       |
-  | --bg-elevated     | #1F232C   | #F2F3F5   | Modals, dropdowns            |
-  | --border          | #2A2E37   | #E4E6EA   | Dividers                     |
-  | --text-primary    | #F3F4F6   | #111318   | Headings, file names         |
-  | --text-secondary  | #9AA1AE   | #5B616E   | Metadata, muted text         |
-  | --accent-primary  | #6366F1   | #4F46E5   | Buttons, active tabs, links  |
-  | --accent-success  | #22C55E   | #16A34A   | Encrypted / unlocked states  |
-  | --accent-warning  | #F59E0B   | #D97706   | Warnings                     |
-  | --accent-danger   | #EF4444   | #DC2626   | Delete, lock errors          |
+  SURFACE / TEXT / BORDER RAMP
+  | Token              | Dark      | Light     | Use                             |
+  |--------------------|-----------|-----------|---------------------------------|
+  | --bg-base          | #0F1115   | #EDEFF3   | App background                  |
+  | --bg-surface       | #171A21   | #FFFFFF   | Cards, panels, sidebar          |
+  | --bg-elevated (=2) | #1F232C   | #E3E6ED   | Modals, dropdowns, inputs       |
+  | --border           | #2A2E37   | #D7DBE3   | Default dividers                |
+  | --border-2         | #363C48   | #C2C8D4   | Stronger dividers / focus rails |
+  | --text-primary     | #F3F4F6   | #14171F   | Headings, file names            |
+  | --text-secondary   | #9AA1AE   | #565D6B   | Metadata, muted text (text-dim) |
+  | --text-faint       | #828A99   | #6B7280   | Placeholders, hints (text-faint)|
+  | --accent-primary   | #6366F1   | #4F46E5   | Buttons, active tabs, links     |
+  | --accent-success   | #22C55E   | #15803D   | Encrypted / unlocked states     |
+  | --accent-warning   | #F59E0B   | #B45309   | Warnings                        |
+  | --accent-danger    | #EF4444   | #DC2626   | Delete, lock errors             |
+
+  PAPER (constant across themes — a document should always look like a page)
+  | --paper            | #F7F3EA   | Warm off-white file-preview card fill        |
+  | --paper-2          | #EFE7D8   | Warm secondary (page gutter / footer)        |
+  | --paper-border     | #E4D9C3   | Hairline around a page                        |
+  | --paper-text       | #23201A   | Ink on paper                                  |
+  | --paper-text-dim   | #6B6456   | Faded ink (captions, page numbers)            |
+
+  Light-theme rationale (NOT an inversion of dark):
+  - Background is a soft cool gray (#EDEFF3), not pure white, so white surfaces
+    (#FFFFFF cards) lift off the page with a clear ~4% luminance step + border.
+  - Elevated (#E3E6ED) sits *below* surface white but *above* background, giving
+    inputs/dropdowns depth without heavy borders.
+  - Text ramp is tuned for contrast on WHITE surfaces (the common case):
+      #14171F ≈ 16.8:1 (AAA) · #565D6B ≈ 7.0:1 (AAA) · #6B7280 ≈ 4.9:1 (AA).
+    All three also clear AA on the #EDEFF3 background.
+  - Success/warning are darkened from their dark-theme values (#15803D / #B45309)
+    because the bright #22C55E / #F59E0B fail AA as text/icons on light surfaces.
+
+  Elevation differs meaningfully per theme:
+  - Dark leans on a 1px light inset "edge" + soft ambient drop; modals add an
+    indigo glow. Big blurry shadows read as mud on near-black, so we keep them
+    tight and rely on the border/glow for separation.
+  - Light uses real, layered soft shadows (ambient + key) for physical depth,
+    which is what users expect from a paper-like light UI.
+  ============================================================================
 */
 
 @theme inline {
+  /* Radius scale — rounded "vault/security" aesthetic */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 16px);
+  --radius-pill: 9999px;
+
+  /* shadcn/radix bridge tokens (unchanged) */
   --color-background: var(--bg-base);
   --color-foreground: var(--text-primary);
   --color-card: var(--bg-surface);
@@ -45,53 +87,158 @@
   --color-border: var(--border);
   --color-input: var(--border);
   --color-ring: var(--accent-primary);
+
+  /* SecureVault semantic surface/text/border ramp */
   --color-sv-bg: var(--bg-base);
   --color-sv-surface: var(--bg-surface);
   --color-sv-surface-raised: var(--bg-elevated);
+  --color-sv-surface-2: var(--bg-elevated);
   --color-sv-border: var(--border);
+  --color-sv-border-2: var(--border-2);
   --color-sv-text: var(--text-primary);
   --color-sv-text-muted: var(--text-secondary);
+  --color-sv-text-dim: var(--text-secondary);
+  --color-sv-text-faint: var(--text-faint);
   --color-sv-accent: var(--accent-primary);
   --color-sv-accent-fg: #ffffff;
   --color-sv-danger: var(--accent-danger);
   --color-sv-success: var(--accent-success);
   --color-sv-warning: var(--accent-warning);
-  --font-sans: 'Outfit Variable', 'Outfit', sans-serif;
+
+  /* Paper surface for file-preview cards (warm off-white, constant per theme) */
+  --color-sv-paper: var(--paper);
+  --color-sv-paper-2: var(--paper-2);
+  --color-sv-paper-border: var(--paper-border);
+  --color-sv-paper-text: var(--paper-text);
+  --color-sv-paper-text-dim: var(--paper-text-dim);
+
+  /* Module accents (8) — theme-tuned values under identical names, see note below */
+  --color-mod-accounts: var(--mod-accounts);
+  --color-mod-defence: var(--mod-defence);
+  --color-mod-engineering: var(--mod-engineering);
+  --color-mod-hr: var(--mod-hr);
+  --color-mod-npd: var(--mod-npd);
+  --color-mod-other: var(--mod-other);
+  --color-mod-qa: var(--mod-qa);
+  --color-mod-railway: var(--mod-railway);
+
+  /* Elevation — resolves per theme via --sv-shadow-* */
+  --shadow-card: var(--sv-shadow-card);
+  --shadow-modal: var(--sv-shadow-modal);
+
+  /* Typography */
+  --font-sans: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  /* Type scale — Outfit display/body. Standard xs–7xl kept; add a tighter 2xs. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-2xs--letter-spacing: 0.01em;
+
+  --tracking-display: -0.02em;
+  --tracking-tightish: -0.01em;
 }
 
+/* ------------------------------ DARK (default) ------------------------------ */
+/* `:root` keeps dark as the fallback when no data-theme is present yet (e.g. JS
+   disabled), while `[data-theme='dark']` is what ThemeProvider / the inline
+   anti-FOUC script set explicitly. */
 :root,
-.dark {
+[data-theme='dark'] {
   color-scheme: dark;
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --sv-titlebar-height: 56px;
   --sv-header-height: 56px;
   --sv-sidebar-width: min(280px, 86vw);
-  --sv-radius: 10px;
+  --sv-radius: 12px;
+
+  /* Layout spacing scale (4px base). Utilities (p-4, gap-6, …) derive from
+     --spacing; these are semantic layout rhythm tokens used via var(). */
+  --spacing: 0.25rem;
+  --sv-gap: 0.75rem; /* 12px — intra-card element gap */
+  --sv-gutter: 1rem; /* 16px — card / list padding      */
+  --sv-section: 1.5rem; /* 24px — between major sections    */
+  --sv-page: 2rem; /* 32px — page frame padding        */
 
   --bg-base: #0f1115;
   --bg-surface: #171a21;
   --bg-elevated: #1f232c;
   --border: #2a2e37;
+  --border-2: #363c48;
   --text-primary: #f3f4f6;
   --text-secondary: #9aa1ae;
+  --text-faint: #828a99;
   --accent-primary: #6366f1;
   --accent-success: #22c55e;
   --accent-warning: #f59e0b;
   --accent-danger: #ef4444;
+
+  /* Paper — warm off-white "document" surface (same in both themes) */
+  --paper: #f7f3ea;
+  --paper-2: #efe7d8;
+  --paper-border: #e4d9c3;
+  --paper-text: #23201a;
+  --paper-text-dim: #6b6456;
+
+  /* Module accents — bright (≈400-level) for legibility on near-black */
+  --mod-accounts: #34d399;
+  --mod-defence: #fb7185;
+  --mod-engineering: #facc15;
+  --mod-hr: #f472b6;
+  --mod-npd: #a78bfa;
+  --mod-other: #94a3b8;
+  --mod-qa: #2dd4bf;
+  --mod-railway: #60a5fa;
+
+  /* Elevation — border/edge + tight ambient; modal adds indigo glow */
+  --sv-shadow-card:
+    0 0 0 1px rgb(255 255 255 / 4%), 0 1px 2px 0 rgb(0 0 0 / 40%),
+    0 12px 28px -14px rgb(0 0 0 / 65%);
+  --sv-shadow-modal:
+    0 0 0 1px rgb(255 255 255 / 6%), 0 24px 64px -24px rgb(0 0 0 / 80%),
+    0 0 48px -12px rgb(99 102 241 / 22%);
 }
 
-.light {
+/* ------------------------------- LIGHT ------------------------------------- */
+[data-theme='light'] {
   color-scheme: light;
-  --bg-base: #fafafa;
+
+  --bg-base: #edeff3;
   --bg-surface: #ffffff;
-  --bg-elevated: #f2f3f5;
-  --border: #e4e6ea;
-  --text-primary: #111318;
-  --text-secondary: #5b616e;
+  --bg-elevated: #e3e6ed;
+  --border: #d7dbe3;
+  --border-2: #c2c8d4;
+  --text-primary: #14171f;
+  --text-secondary: #565d6b;
+  --text-faint: #6b7280;
   --accent-primary: #4f46e5;
-  --accent-success: #16a34a;
-  --accent-warning: #d97706;
+  --accent-success: #15803d;
+  --accent-warning: #b45309;
   --accent-danger: #dc2626;
+
+  /* Module accents — deepened (≈600-level) variant per accent so badges/labels
+     keep AA contrast on light surfaces. This is the "slightly darkened variant
+     token per accent" approach: identical variable NAMES across themes, values
+     tuned per theme. (Filter fallback for one-off cases:
+        [data-theme='light'] .mod-tint { filter: brightness(0.82) saturate(1.12); }
+     but per-token values below are preferred — they're deterministic.) */
+  --mod-accounts: #059669;
+  --mod-defence: #e11d48;
+  --mod-engineering: #ca8a04;
+  --mod-hr: #db2777;
+  --mod-npd: #7c3aed;
+  --mod-other: #475569;
+  --mod-qa: #0d9488;
+  --mod-railway: #2563eb;
+
+  /* Elevation — real layered soft shadows for physical depth */
+  --sv-shadow-card:
+    0 1px 2px 0 rgb(17 19 24 / 6%), 0 6px 16px -6px rgb(17 19 24 / 10%);
+  --sv-shadow-modal:
+    0 10px 20px -8px rgb(17 19 24 / 12%), 0 28px 56px -20px rgb(17 19 24 / 18%);
 }
 
 @layer base {
@@ -118,9 +265,24 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Light mode: soften the ambient glows so they don't muddy a paper-like UI */
+  [data-theme='light'] body {
+    background:
+      radial-gradient(1000px 520px at 12% -8%, rgb(79 70 229 / 6%), transparent 55%),
+      radial-gradient(800px 420px at 92% 0%, rgb(21 128 61 / 4%), transparent 50%),
+      var(--bg-base);
+  }
+
+  /* File names, timestamps and IDs render in the monospace stack */
+  .font-mono,
+  [data-mono] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
   @media (min-width: 768px) {
     :root,
-    .dark {
+    [data-theme='dark'] {
       --sv-titlebar-height: 56px;
       --sv-header-height: 56px;
       --sv-sidebar-width: 240px;

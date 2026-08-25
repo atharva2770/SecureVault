@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { Menu, Search, Shield } from 'lucide-react'
 
 import { useAuth } from '@/auth/AuthProvider'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { UserAvatar } from '@/components/UserAvatar'
 import { Button } from '@/components/ui/button'
 import ProfileMenu from '@/layout/ProfileMenu'
@@ -94,6 +95,7 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
       </div>
 
       <div className="relative flex items-center gap-1">
+        <ThemeToggle />
         {user ? (
           <button
             type="button"

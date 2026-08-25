@@ -255,6 +255,64 @@ Core tables include:
 
 ---
 
+## Design Tokens
+
+The UI is themed entirely through CSS custom properties in `apps/web/src/assets/globals.css`. Tailwind v4 configures itself in CSS via `@theme inline`, so there is no `tailwind.config.js`. Themes are toggled by `ThemeProvider` (`.dark` / `.light` on `<html>`); light overrides also match `[data-theme='light']`, so either convention resolves. Because every theme value is consumed through `@theme inline`, utilities such as `bg-sv-surface`, `text-sv-text-faint`, `shadow-card`, and `font-mono` resolve live per theme.
+
+### Surface / text / border ramp
+
+| Token | Dark | Light | Tailwind utility | Use |
+| --- | --- | --- | --- | --- |
+| `--bg-base` | `#0F1115` | `#EDEFF3` | `bg-sv-bg` | App background |
+| `--bg-surface` | `#171A21` | `#FFFFFF` | `bg-sv-surface` | Cards, panels, sidebar |
+| `--bg-elevated` | `#1F232C` | `#E3E6ED` | `bg-sv-surface-2` | Modals, dropdowns, inputs |
+| `--border` | `#2A2E37` | `#D7DBE3` | `border-sv-border` | Default dividers |
+| `--border-2` | `#363C48` | `#C2C8D4` | `border-sv-border-2` | Stronger dividers / focus rails |
+| `--text-primary` | `#F3F4F6` | `#14171F` | `text-sv-text` | Headings, file names |
+| `--text-secondary` | `#9AA1AE` | `#565D6B` | `text-sv-text-dim` | Metadata, muted text |
+| `--text-faint` | `#828A99` | `#6B7280` | `text-sv-text-faint` | Placeholders, hints |
+| `--accent-primary` | `#6366F1` | `#4F46E5` | `text-sv-accent` | Buttons, active tabs, links |
+| `--accent-success` | `#22C55E` | `#15803D` | `text-sv-success` | Encrypted / unlocked states |
+| `--accent-warning` | `#F59E0B` | `#B45309` | `text-sv-warning` | Warnings |
+| `--accent-danger` | `#EF4444` | `#DC2626` | `text-sv-danger` | Delete / lock errors |
+
+**Why the light theme is not an inversion.** The background is a soft cool gray (`#EDEFF3`) rather than pure white, so white surfaces (`#FFFFFF` cards) lift off the page with a clear luminance step plus a border; `#E3E6ED` "elevated" sits below surface white but above the background for input/dropdown depth. The text ramp is tuned for contrast on white (the common case): `#14171F` ≈ 16.8:1 (AAA), `#565D6B` ≈ 7.0:1 (AAA), `#6B7280` ≈ 4.9:1 (AA) — all three also clear AA on the `#EDEFF3` background. Success and warning are darkened from their dark-theme values because the bright `#22C55E` / `#F59E0B` fail AA as text/icons on light surfaces.
+
+### Paper surface (file-preview cards)
+
+A document should always read like a page, so the "paper" tokens are **constant across both themes**: `--paper` `#F7F3EA` (warm off-white fill, `bg-sv-paper`), `--paper-2` `#EFE7D8`, `--paper-border` `#E4D9C3`, `--paper-text` `#23201A` (`text-sv-paper-text`), `--paper-text-dim` `#6B6456`.
+
+### Module accents (8)
+
+One color per document module, exposed as `bg-mod-*` / `text-mod-*` / `border-mod-*` (`accounts`, `defence`, `engineering`, `hr`, `npd`, `other`, `qa`, `railway`). The **variable names are identical across themes**; only the values shift. Dark uses bright ≈400-level hues for legibility on near-black; light uses a **deepened ≈600-level variant per accent** so badges/labels keep AA contrast on light surfaces.
+
+| Module | Dark | Light |
+| --- | --- | --- |
+| Accounts | `#34D399` | `#059669` |
+| Defence Tender | `#FB7185` | `#E11D48` |
+| Engineering | `#FACC15` | `#CA8A04` |
+| HR | `#F472B6` | `#DB2777` |
+| NPD | `#A78BFA` | `#7C3AED` |
+| Other | `#94A3B8` | `#475569` |
+| QA | `#2DD4BF` | `#0D9488` |
+| Railway Tender | `#60A5FA` | `#2563EB` |
+
+The per-token darkened light values are preferred because they are deterministic. A CSS `filter: brightness(0.82) saturate(1.12)` under `[data-theme='light']` is documented in the stylesheet as a fallback for any one-off surface that cannot use the tokens directly.
+
+### Elevation
+
+Shadows differ meaningfully by theme via `shadow-card` and `shadow-modal`. Dark leans on a 1px light inset "edge" plus a tight ambient drop (big blurry shadows read as mud on near-black), and modals add an indigo glow. Light uses real layered soft shadows (ambient + key) for physical depth, matching a paper-like UI.
+
+### Typography
+
+Display and body text use the installed Outfit variable font (`@fontsource-variable/outfit`) via `--font-sans` / `--font-display` (`font-sans`). File names, timestamps, and IDs use the monospace stack `--font-mono` (`font-mono`, or the `data-mono` attribute) with tabular figures. The standard Tailwind `text-xs … text-7xl` scale is retained, with an added tighter `text-2xs` (11px) and `tracking-display` / `tracking-tightish` letter-spacing tokens for headings.
+
+### Radius & spacing
+
+The rounded "vault" aesthetic uses a `--radius` base of `0.75rem`, with `rounded-sm/md/lg/xl/2xl/3xl` and `rounded-pill` derived from it. Spacing follows Tailwind's 4px scale (`--spacing: 0.25rem`); semantic layout rhythm tokens `--sv-gap` (12px), `--sv-gutter` (16px), `--sv-section` (24px), and `--sv-page` (32px) are available via `var()`.
+
+---
+
 ## Roadmap
 
 - **Phase 5 (done)** — web-only client. `npm start` / `npm run dev` run the API and browser UI.

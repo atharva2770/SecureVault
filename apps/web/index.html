@@ -1,9 +1,31 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SecureVault</title>
+    <!--
+      Anti-FOUC: resolve the theme (persisted choice > OS preference > dark) and
+      set data-theme on <html> before the app stylesheet/JS load, so the first
+      paint already uses the correct theme. Kept in sync with ThemeProvider.
+    -->
+    <script>
+      ;(function () {
+        try {
+          var key = 'sv-theme'
+          var stored = localStorage.getItem(key)
+          var theme =
+            stored === 'light' || stored === 'dark'
+              ? stored
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+          document.documentElement.setAttribute('data-theme', theme)
+        } catch (e) {
+          /* keep the data-theme="dark" default from the <html> tag */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
