@@ -112,7 +112,7 @@ export function ModulePage({
             <button
               type="button"
               onClick={onBackToDashboard}
-              className="rounded px-1.5 py-0.5 transition hover:bg-sv-surface-2 hover:text-sv-text motion-reduce:transition-none"
+              className="min-h-11 rounded px-1.5 py-0.5 outline-none transition hover:bg-sv-surface-2 hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent motion-reduce:transition-none sm:min-h-0"
             >
               My Vault
             </button>
@@ -144,13 +144,13 @@ export function ModulePage({
 
       {/* Subfolder cards */}
       {subfolders.length > 0 ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {subfolders.map((folder) => (
-            <Card key={folder.folderId} interactive className="flex items-center gap-1 p-1.5">
+            <Card key={folder.folderId} className="flex items-center gap-1 p-1.5">
               <button
                 type="button"
                 onClick={() => onPickFile(folder)}
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-[calc(var(--sv-radius)-4px)] p-2.5 text-left outline-none transition hover:bg-sv-surface-2 focus-visible:ring-2 focus-visible:ring-sv-accent/50 motion-reduce:transition-none"
+                className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-[calc(var(--sv-radius)-4px)] p-2.5 text-left outline-none transition hover:bg-sv-surface-2 focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface motion-reduce:transition-none"
               >
                 <div
                   className="flex size-10 shrink-0 items-center justify-center rounded-[calc(var(--sv-radius)-2px)]"
@@ -171,7 +171,7 @@ export function ModulePage({
                 onClick={() => onOpenFolder(folder)}
                 aria-label={`Browse ${folder.name}`}
                 title="Browse folder"
-                className="flex size-9 shrink-0 items-center justify-center rounded-[calc(var(--sv-radius)-4px)] text-sv-text-muted outline-none transition hover:bg-sv-surface-2 hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent/50 motion-reduce:transition-none"
+                className="flex size-11 shrink-0 items-center justify-center rounded-[calc(var(--sv-radius)-4px)] text-sv-text-muted outline-none transition hover:bg-sv-surface-2 hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface motion-reduce:transition-none"
               >
                 <FolderOpen className="size-4" />
               </button>

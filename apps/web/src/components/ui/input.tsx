@@ -19,11 +19,11 @@ function Input({ className, type = 'text', error, ...props }: InputProps): React
   const resolvedType = isPassword && reveal ? 'text' : type
 
   const inputClass = cn(
-    'flex h-9 w-full rounded-md border bg-sv-bg px-3 py-1 text-sm text-sv-text shadow-sm outline-none transition placeholder:text-sv-text-faint disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none',
+    'flex h-11 w-full rounded-md border bg-sv-bg px-3 py-1 text-sm text-sv-text shadow-sm outline-none transition placeholder:text-sv-text-faint disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none sm:h-9',
     error
-      ? 'border-sv-danger focus-visible:border-sv-danger focus-visible:ring-2 focus-visible:ring-sv-danger/40'
-      : 'border-sv-border focus-visible:border-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent/40',
-    isPassword && 'pr-10',
+      ? 'border-sv-danger focus-visible:border-sv-danger focus-visible:ring-2 focus-visible:ring-sv-danger focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface'
+      : 'border-sv-border focus-visible:border-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface',
+    isPassword && 'pr-11',
     className
   )
 
@@ -44,10 +44,10 @@ function Input({ className, type = 'text', error, ...props }: InputProps): React
       {field}
       <button
         type="button"
-        tabIndex={-1}
+        tabIndex={0}
         onClick={() => setReveal((v) => !v)}
         aria-label={reveal ? 'Hide password' : 'Show password'}
-        className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-sv-text-muted outline-none transition hover:text-sv-text focus-visible:text-sv-text motion-reduce:transition-none"
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-sv-text-muted outline-none transition hover:text-sv-text focus-visible:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface motion-reduce:transition-none"
       >
         {reveal ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
       </button>

@@ -21,9 +21,10 @@ export function ThemeToggle({ className }: { className?: string }): React.JSX.El
       size="icon"
       onClick={toggleTheme}
       aria-label={label}
+      aria-pressed={isDark}
       title={label}
       className={cn(
-        'relative size-10 text-sv-text-muted hover:text-sv-text',
+        'relative size-11 text-sv-text-muted hover:text-sv-text sm:size-10',
         className
       )}
     >

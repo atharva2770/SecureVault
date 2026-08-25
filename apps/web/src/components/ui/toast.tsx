@@ -67,7 +67,7 @@ function Toast({
           type="button"
           onClick={onClose}
           aria-label="Dismiss notification"
-          className="-mt-0.5 -mr-0.5 flex size-6 shrink-0 items-center justify-center rounded-md text-sv-text-muted outline-none transition hover:bg-sv-surface-raised hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent/50 motion-reduce:transition-none"
+          className="-mt-0.5 -mr-0.5 flex size-11 shrink-0 items-center justify-center rounded-md text-sv-text-muted outline-none transition hover:bg-sv-surface-raised hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface-2 motion-reduce:transition-none sm:size-6"
         >
           <X className="size-3.5" />
         </button>

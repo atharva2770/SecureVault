@@ -55,96 +55,108 @@ export function RightsMatrix({
   }
 
   return (
-    <div className="overflow-x-auto rounded-[var(--sv-radius)] border border-sv-border">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-sv-surface-2">
-            <th
-              scope="col"
-              className="sticky left-0 z-[1] min-w-[200px] border-b border-sv-border bg-sv-surface-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-sv-text-muted"
-            >
-              Person
-            </th>
-            {modules.map((mod) => {
-              const accent = moduleThemeForCategory(mod.name).colorVar
-              return (
-                <th
-                  key={mod.folderId}
-                  scope="col"
-                  className="border-b border-l border-sv-border px-3 py-3 text-center align-bottom"
-                >
-                  <span className="flex flex-col items-center gap-1.5">
-                    <span
-                      aria-hidden="true"
-                      className="size-2.5 rounded-full"
-                      style={{ backgroundColor: accent }}
-                    />
-                    <span className="max-w-[92px] truncate text-xs font-medium text-sv-text">
-                      {mod.name}
+    <div>
+      <p className="mb-2 text-xs text-sv-text-muted lg:hidden">
+        Swipe sideways to see every module. The person column stays pinned.
+      </p>
+      <div className="sv-scroll-hint overflow-x-auto rounded-[var(--sv-radius)] border border-sv-border">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
+          <thead>
+            <tr className="bg-sv-surface-2">
+              <th
+                scope="col"
+                className="sticky left-0 z-[1] min-w-[180px] border-b border-sv-border bg-sv-surface-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-sv-text-muted"
+              >
+                Person
+              </th>
+              {modules.map((mod) => {
+                const accent = moduleThemeForCategory(mod.name).colorVar
+                return (
+                  <th
+                    key={mod.folderId}
+                    scope="col"
+                    className="min-w-[7.5rem] border-b border-l border-sv-border px-3 py-3 text-center align-bottom"
+                  >
+                    <span className="flex flex-col items-center gap-1.5">
+                      <span
+                        aria-hidden="true"
+                        className="size-2.5 rounded-full"
+                        style={{ backgroundColor: accent }}
+                      />
+                      <span className="max-w-[6.5rem] truncate text-xs font-medium text-sv-text">
+                        {mod.name}
+                      </span>
                     </span>
-                  </span>
-                </th>
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => {
+              const admin = isAdminAccount(user)
+              const role = admin ? 'Admin' : 'Member'
+              return (
+                <tr key={user.userId} className="group transition-colors hover:bg-sv-surface-2/60">
+                  <th
+                    scope="row"
+                    className="sticky left-0 z-[1] border-b border-sv-border bg-sv-surface px-4 py-2.5 text-left font-normal transition-colors group-hover:bg-sv-surface-2/60"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <UserAvatar username={user.username} size="sm" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-sv-text">
+                          {user.username}
+                        </span>
+                        <span className="block text-[11px] text-sv-text-muted">
+                          {role}
+                          {user.isDisabled ? ' · Disabled' : ''}
+                        </span>
+                      </span>
+                    </span>
+                  </th>
+                  {modules.map((mod) => {
+                    const checked = admin || hasAccess(aclsByFolder[mod.folderId], user.userId)
+                    const pending = isPendingCell(user.userId, mod.folderId)
+                    const label = `${role} ${user.username}, ${mod.name}`
+                    return (
+                      <td
+                        key={mod.folderId}
+                        className="border-b border-l border-sv-border px-1 py-1 text-center"
+                      >
+                        {admin ? (
+                          <span className="inline-flex size-11 items-center justify-center">
+                            <ShieldCheck
+                              className="size-4 text-sv-text-faint"
+                              aria-label={`${label}: admins have every module`}
+                            />
+                          </span>
+                        ) : pending ? (
+                          <span className="inline-flex size-11 items-center justify-center">
+                            <Loader2 className="size-4 animate-spin text-sv-text-muted" />
+                          </span>
+                        ) : (
+                          <label className="inline-flex size-11 cursor-pointer items-center justify-center rounded-md outline-none focus-within:ring-2 focus-within:ring-sv-accent focus-within:ring-offset-2 focus-within:ring-offset-sv-surface">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => onToggle(user.userId, mod.folderId, e.target.checked)}
+                              aria-label={`${checked ? 'Revoke' : 'Grant'} ${label}`}
+                              className={cn(
+                                'size-4 cursor-pointer rounded border-sv-border accent-[var(--accent-primary)]'
+                              )}
+                            />
+                          </label>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
               )
             })}
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => {
-            const admin = isAdminAccount(user)
-            return (
-              <tr key={user.userId} className="group transition-colors hover:bg-sv-surface-2/60">
-                <th
-                  scope="row"
-                  className="sticky left-0 z-[1] border-b border-sv-border bg-sv-surface px-4 py-2.5 text-left font-normal transition-colors group-hover:bg-sv-surface-2/60"
-                >
-                  <span className="flex items-center gap-2.5">
-                    <UserAvatar username={user.username} size="sm" />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-sv-text">
-                        {user.username}
-                      </span>
-                      <span className="block text-[11px] text-sv-text-muted">
-                        {admin ? 'Admin' : 'Member'}
-                        {user.isDisabled ? ' · Disabled' : ''}
-                      </span>
-                    </span>
-                  </span>
-                </th>
-                {modules.map((mod) => {
-                  const checked = admin || hasAccess(aclsByFolder[mod.folderId], user.userId)
-                  const pending = isPendingCell(user.userId, mod.folderId)
-                  return (
-                    <td
-                      key={mod.folderId}
-                      className="border-b border-l border-sv-border px-3 py-2.5 text-center"
-                    >
-                      {admin ? (
-                        <ShieldCheck
-                          className="mx-auto size-4 text-sv-text-faint"
-                          aria-label="Admins have every module"
-                        />
-                      ) : pending ? (
-                        <Loader2 className="mx-auto size-4 animate-spin text-sv-text-muted" />
-                      ) : (
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => onToggle(user.userId, mod.folderId, e.target.checked)}
-                          aria-label={`${checked ? 'Remove' : 'Grant'} ${user.username} access to ${mod.name}`}
-                          className={cn(
-                            'size-4 cursor-pointer rounded border-sv-border accent-sv-accent',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sv-accent/50'
-                          )}
-                        />
-                      )}
-                    </td>
-                  )
-                })}
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

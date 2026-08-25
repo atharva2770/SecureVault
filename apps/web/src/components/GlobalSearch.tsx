@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 const MIN_CHARS = 2
 const PER_SECTION = 5
 
-export function GlobalSearch(): React.JSX.Element {
+export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): React.JSX.Element {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -82,18 +82,20 @@ export function GlobalSearch(): React.JSX.Element {
           value={text}
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => setOpen(text.trim().length >= MIN_CHARS)}
+          autoFocus={autoFocus}
           role="combobox"
           aria-expanded={showDropdown}
           aria-controls="global-search-results"
+          aria-label="Search files, folders and modules"
           placeholder="Search files, folders and modules"
-          className="h-10 w-full rounded-full border border-sv-border bg-sv-bg py-0 pr-10 pl-10 text-sm text-sv-text outline-none transition placeholder:text-sv-text-faint focus:border-sv-accent focus:ring-2 focus:ring-sv-accent/40 motion-reduce:transition-none"
+          className="h-11 w-full rounded-full border border-sv-border bg-sv-bg py-0 pr-11 pl-10 text-sm text-sv-text outline-none transition placeholder:text-sv-text-faint focus:border-sv-accent focus:ring-2 focus:ring-sv-accent focus:ring-offset-2 focus:ring-offset-sv-surface motion-reduce:transition-none sm:h-10"
         />
         {text ? (
           <button
             type="button"
             onClick={clear}
             aria-label="Clear search"
-            className="absolute top-1/2 right-3 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-sv-text-muted transition hover:bg-sv-surface-2 hover:text-sv-text motion-reduce:transition-none"
+            className="absolute top-1/2 right-2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full text-sv-text-muted outline-none transition hover:bg-sv-surface-2 hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent motion-reduce:transition-none sm:size-8"
           >
             <X className="size-3.5" />
           </button>
@@ -192,7 +194,7 @@ function ResultRow({
       role="option"
       aria-selected={false}
       onClick={onSelect}
-      className="flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left transition hover:bg-sv-surface-2 motion-reduce:transition-none"
+      className="flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2.5 text-left outline-none transition hover:bg-sv-surface-2 focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-inset motion-reduce:transition-none max-sm:min-h-11"
     >
       <span className={cn('min-w-0 flex-1 truncate text-sm text-sv-text', mono && 'font-mono')}>
         {label}

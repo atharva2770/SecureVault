@@ -87,14 +87,16 @@ export function InviteUserModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} size="md">
+    <Modal open={open} onClose={onClose} size="md" title="Invite a user" titleSrOnly>
       <form onSubmit={handleSubmit}>
         <div className="flex items-center gap-3">
           <div className="flex size-11 shrink-0 items-center justify-center rounded-[var(--sv-radius)] bg-sv-accent/15 text-sv-accent ring-1 ring-inset ring-sv-accent/25">
             <UserPlus className="size-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold tracking-tight text-sv-text">Invite a user</h2>
+            <h2 className="text-base font-semibold tracking-tight text-sv-text" aria-hidden="true">
+              Invite a user
+            </h2>
             <p className="text-sm text-sv-text-muted">
               Creates an account they sign in with straight away.
             </p>
@@ -139,7 +141,7 @@ export function InviteUserModal({
                     type="button"
                     onClick={() => setIsAdmin(option.value)}
                     className={cn(
-                      'rounded-[var(--sv-radius)] border px-3 py-2.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent/50 motion-reduce:transition-none',
+                      'min-h-11 rounded-[var(--sv-radius)] border px-3 py-2.5 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface motion-reduce:transition-none',
                       active
                         ? 'border-sv-accent bg-sv-accent/10'
                         : 'border-sv-border hover:border-sv-border-2 hover:bg-sv-surface-2'
@@ -159,7 +161,7 @@ export function InviteUserModal({
               value={department}
               disabled={isAdmin}
               onChange={(e) => setDepartment(e.target.value)}
-              className="h-9 w-full rounded-md border border-sv-border bg-sv-bg px-3 text-sm text-sv-text outline-none transition focus-visible:border-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent/40 disabled:cursor-not-allowed motion-reduce:transition-none"
+              className="h-11 w-full rounded-md border border-sv-border bg-sv-bg px-3 text-sm text-sv-text outline-none transition focus-visible:border-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface disabled:cursor-not-allowed motion-reduce:transition-none sm:h-9"
             >
               <option value="">No department yet</option>
               {modules.map((mod) => (

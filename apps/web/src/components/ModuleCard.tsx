@@ -55,13 +55,14 @@ export function ModuleCard({
   return (
     <Card
       className={cn(
-        'group relative overflow-hidden shadow-card transition-all duration-200 motion-reduce:transition-none',
+        'group relative overflow-hidden shadow-card outline-none transition-all duration-200 motion-reduce:transition-none',
         interactive &&
-          'cursor-pointer hover:-translate-y-1 hover:shadow-modal focus-within:-translate-y-1 motion-reduce:hover:translate-y-0',
+          'cursor-pointer hover:-translate-y-1 hover:shadow-modal focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:hover:translate-y-0',
         locked && 'select-none'
       )}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `Open ${label}` : undefined}
       onClick={interactive ? onOpen : undefined}
       onKeyDown={
         interactive

@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
   on them. No hardcoded colors: everything resolves from Prompt 1 tokens.
 */
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium outline-none transition-all focus-visible:border-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent/50 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "sv-focus inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium outline-none transition-all focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none max-sm:min-h-11 max-sm:min-w-11 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -24,13 +24,13 @@ const buttonVariants = cva(
           'border border-sv-border bg-transparent text-sv-text hover:border-sv-border-2 hover:bg-sv-surface-2',
         ghost: 'bg-transparent text-sv-text hover:bg-sv-surface-2',
         danger:
-          'bg-sv-danger text-sv-accent-fg shadow-sm hover:brightness-110 active:brightness-95'
+          'bg-[var(--accent-danger)] text-sv-accent-fg shadow-sm hover:brightness-110 active:brightness-95'
       },
       size: {
-        sm: 'h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5',
-        md: 'h-9 px-4 py-2 has-[>svg]:px-3',
-        lg: 'h-10 rounded-md px-6 text-base has-[>svg]:px-4',
-        icon: 'size-9'
+        sm: 'h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5 max-sm:h-11',
+        md: 'h-9 px-4 py-2 has-[>svg]:px-3 max-sm:h-11',
+        lg: 'h-11 rounded-md px-6 text-base has-[>svg]:px-4',
+        icon: 'size-9 max-sm:size-11'
       }
     },
     defaultVariants: {

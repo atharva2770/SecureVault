@@ -25,11 +25,13 @@
   | --border-2         | #363C48   | #C2C8D4   | Stronger dividers / focus rails |
   | --text-primary     | #F3F4F6   | #14171F   | Headings, file names            |
   | --text-secondary   | #9AA1AE   | #565D6B   | Metadata, muted text (text-dim) |
-  | --text-faint       | #828A99   | #6B7280   | Placeholders, hints (text-faint)|
-  | --accent-primary   | #6366F1   | #4F46E5   | Buttons, active tabs, links     |
-  | --accent-success   | #22C55E   | #15803D   | Encrypted / unlocked states     |
-  | --accent-warning   | #F59E0B   | #B45309   | Warnings                        |
-  | --accent-danger    | #EF4444   | #DC2626   | Delete, lock errors             |
+  | --text-faint       | #828A99   | #4B5563   | Placeholders, hints (text-faint)|
+  | --accent-primary   | #4F46E5   | #4338CA   | Button fills (white text ≥4.5:1)|
+  | --accent-ink       | #818CF8   | #4338CA   | Accent text/icons (≥4.5:1)      |
+  | --accent-success   | #22C55E   | #166534   | Encrypted / unlocked states     |
+  | --accent-warning   | #F59E0B   | #92400E   | Warnings                        |
+  | --accent-danger    | #DC2626   | #B91C1C   | Button fills                    |
+  | --danger-ink       | #F87171   | #B91C1C   | Danger text/icons (≥4.5:1)      |
 
   PAPER (constant across themes — a document should always look like a page)
   | --paper            | #F7F3EA   | Warm off-white file-preview card fill        |
@@ -44,10 +46,13 @@
   - Elevated (#E3E6ED) sits *below* surface white but *above* background, giving
     inputs/dropdowns depth without heavy borders.
   - Text ramp is tuned for contrast on WHITE surfaces (the common case):
-      #14171F ≈ 16.8:1 (AAA) · #565D6B ≈ 7.0:1 (AAA) · #6B7280 ≈ 4.9:1 (AA).
-    All three also clear AA on the #EDEFF3 background.
-  - Success/warning are darkened from their dark-theme values (#15803D / #B45309)
-    because the bright #22C55E / #F59E0B fail AA as text/icons on light surfaces.
+      #14171F ≈ 16.8:1 (AAA) · #565D6B ≈ 7.0:1 (AAA) · #4B5563 ≈ 7.6:1 (AA).
+    All three also clear AA on the #EDEFF3 background and #E3E6ED elevated.
+  - Accent/danger split fill vs ink: a colour that is 4.5:1 as white-on-fill
+    cannot also be 4.5:1 as text on a dark surface. `--accent-primary` /
+    `--accent-danger` are fills; `--accent-ink` / `--danger-ink` are text.
+  - Light module accents are 700-level so they hit 4.5:1 as icon/label colour
+    on white (Engineering yellow in particular fails at 600).
 
   Elevation differs meaningfully per theme:
   - Dark leans on a 1px light inset "edge" + soft ambient drop; modals add an
@@ -99,12 +104,12 @@
   --color-sv-text-muted: var(--text-secondary);
   --color-sv-text-dim: var(--text-secondary);
   --color-sv-text-faint: var(--text-faint);
-  --color-sv-accent: var(--accent-primary);
+  --color-sv-accent: var(--accent-ink);
   --color-sv-accent-2: var(--accent-2);
   --color-sv-accent-fg: #ffffff;
-  --color-sv-danger: var(--accent-danger);
-  --color-sv-success: var(--accent-success);
-  --color-sv-warning: var(--accent-warning);
+  --color-sv-danger: var(--danger-ink);
+  --color-sv-success: var(--success-ink);
+  --color-sv-warning: var(--warning-ink);
 
   /* Paper surface for file-preview cards (warm off-white, constant per theme) */
   --color-sv-paper: var(--paper);
@@ -172,11 +177,15 @@
   --text-primary: #f3f4f6;
   --text-secondary: #9aa1ae;
   --text-faint: #828a99;
-  --accent-primary: #6366f1;
-  --accent-2: #8b5cf6; /* violet — gradient partner for --accent-primary */
+  --accent-primary: #4f46e5; /* fill — white text 6.3:1 */
+  --accent-ink: #818cf8; /* text/icons on dark surfaces 5.8:1 */
+  --accent-2: #7c3aed; /* violet — gradient partner, still ≥4.5:1 with white */
   --accent-success: #22c55e;
   --accent-warning: #f59e0b;
-  --accent-danger: #ef4444;
+  --accent-danger: #dc2626; /* fill — white text ≥4.5:1 */
+  --danger-ink: #f87171; /* text/icons on dark surfaces 6.3:1 */
+  --success-ink: #4ade80;
+  --warning-ink: #fbbf24;
 
   /* Scrim behind modals/sheets (deep, near-black with blue cast) */
   --sv-overlay: rgb(2 4 9 / 62%);
@@ -218,30 +227,31 @@
   --border-2: #c2c8d4;
   --text-primary: #14171f;
   --text-secondary: #565d6b;
-  --text-faint: #6b7280;
-  --accent-primary: #4f46e5;
-  --accent-2: #7c3aed; /* violet — gradient partner for --accent-primary */
-  --accent-success: #15803d;
-  --accent-warning: #b45309;
-  --accent-danger: #dc2626;
+  --text-faint: #4b5563;
+  --accent-primary: #4338ca; /* fill + ink — 7.9:1 on white */
+  --accent-ink: #4338ca;
+  --accent-2: #6d28d9;
+  --accent-success: #166534;
+  --accent-warning: #92400e;
+  --accent-danger: #b91c1c;
+  --danger-ink: #b91c1c;
+  --success-ink: #166534;
+  --warning-ink: #92400e;
 
   /* Scrim behind modals/sheets (lighter, cool scrim for light UI) */
   --sv-overlay: rgb(15 18 24 / 38%);
 
-  /* Module accents — deepened (≈600-level) variant per accent so badges/labels
-     keep AA contrast on light surfaces. This is the "slightly darkened variant
-     token per accent" approach: identical variable NAMES across themes, values
-     tuned per theme. (Filter fallback for one-off cases:
-        [data-theme='light'] .mod-tint { filter: brightness(0.82) saturate(1.12); }
-     but per-token values below are preferred — they're deterministic.) */
-  --mod-accounts: #059669;
-  --mod-defence: #e11d48;
-  --mod-engineering: #ca8a04;
-  --mod-hr: #db2777;
-  --mod-npd: #7c3aed;
-  --mod-other: #475569;
-  --mod-qa: #0d9488;
-  --mod-railway: #2563eb;
+  /* Module accents — deepened (≈700-level) so icon/label colour hits 4.5:1 on
+     white. Engineering yellow is the usual failure at 600; these values were
+     measured against #FFFFFF, #EDEFF3, and #E3E6ED. */
+  --mod-accounts: #047857;
+  --mod-defence: #be123c;
+  --mod-engineering: #854d0e;
+  --mod-hr: #be185d;
+  --mod-npd: #6d28d9;
+  --mod-other: #334155;
+  --mod-qa: #115e59;
+  --mod-railway: #1d4ed8;
 
   /* Elevation — real layered soft shadows for physical depth */
   --sv-shadow-card:
@@ -345,5 +355,74 @@
   }
   50% {
     transform: translateY(-12px);
+  }
+}
+
+/* Visible focus ring — solid accent (not 40–50% opacity) so the ring hits 3:1
+   against adjacent surface colours. Offset keeps it readable on accent fills. */
+.sv-focus {
+  outline: none;
+}
+.sv-focus:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--bg-surface),
+    0 0 0 4px var(--accent-ink);
+}
+
+/* Horizontal-scroll affordance for wide tables (rights matrix). Edge fades
+   stay pinned while the table scrolls underneath. */
+.sv-scroll-hint {
+  background:
+    linear-gradient(to right, var(--bg-surface) 20px, transparent 40px),
+    linear-gradient(to left, var(--bg-surface) 20px, transparent 40px),
+    linear-gradient(to right, rgb(0 0 0 / 16%), transparent 18px),
+    linear-gradient(to left, rgb(0 0 0 / 16%), transparent 18px);
+  background-attachment: local, local, scroll, scroll;
+  background-repeat: no-repeat;
+  background-size: 40px 100%, 40px 100%, 18px 100%, 18px 100%;
+  background-position: left center, right center, left center, right center;
+}
+
+[data-theme='light'] .sv-scroll-hint {
+  background:
+    linear-gradient(to right, var(--bg-surface) 20px, transparent 40px),
+    linear-gradient(to left, var(--bg-surface) 20px, transparent 40px),
+    linear-gradient(to right, rgb(17 19 24 / 10%), transparent 18px),
+    linear-gradient(to left, rgb(17 19 24 / 10%), transparent 18px);
+  background-attachment: local, local, scroll, scroll;
+  background-repeat: no-repeat;
+  background-size: 40px 100%, 40px 100%, 18px 100%, 18px 100%;
+  background-position: left center, right center, left center, right center;
+}
+
+/* 44px minimum touch targets on phones. Checkbox visual size stays small;
+   hit area is expanded via a wrapping label in the matrix. */
+@media (max-width: 639px) {
+  button,
+  [role='button'],
+  [role='menuitem'],
+  [role='tab'],
+  a[data-slot='button'],
+  input:not([type='checkbox']):not([type='radio']):not([type='hidden']),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  button,
+  [role='button'],
+  [role='menuitem'] {
+    min-width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

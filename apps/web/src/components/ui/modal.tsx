@@ -20,6 +20,8 @@ interface ModalProps {
   size?: keyof typeof SIZES
   /** Close when the backdrop is clicked. Defaults to true. */
   closeOnBackdrop?: boolean
+  /** Hide the visual title (still used as aria-labelledby). */
+  titleSrOnly?: boolean
   className?: string
 }
 
@@ -47,10 +49,13 @@ function Modal({
   footer,
   size = 'md',
   closeOnBackdrop = true,
+  titleSrOnly = false,
   className
 }: ModalProps): React.JSX.Element | null {
   const panelRef = React.useRef<HTMLDivElement>(null)
   const restoreFocusRef = React.useRef<HTMLElement | null>(null)
+  const titleId = React.useId()
+  const descriptionId = React.useId()
 
   React.useEffect(() => {
     if (!open) return
@@ -110,26 +115,33 @@ function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={typeof title === 'string' ? title : undefined}
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative z-10 w-full rounded-[calc(var(--sv-radius)+4px)] border border-sv-border bg-sv-surface text-sv-text shadow-modal outline-none animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none',
+          'relative z-10 w-full max-h-[min(100dvh-2rem,40rem)] overflow-y-auto rounded-[calc(var(--sv-radius)+4px)] border border-sv-border bg-sv-surface text-sv-text shadow-modal outline-none animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none',
           SIZES[size],
           className
         )}
       >
-        <div className="flex items-start justify-between gap-4 p-5 pb-0">
-          <div className="min-w-0">
+        <div className={cn('flex items-start justify-between gap-4 p-5 pb-0', titleSrOnly && 'justify-end')}>
+          <div className={cn('min-w-0', titleSrOnly && 'sr-only')}>
             {title ? (
-              <h2 className="text-base font-semibold tracking-tight text-sv-text">{title}</h2>
+              <h2 id={titleId} className="text-base font-semibold tracking-tight text-sv-text">
+                {title}
+              </h2>
             ) : null}
-            {description ? <p className="mt-1 text-sm text-sv-text-muted">{description}</p> : null}
+            {description ? (
+              <p id={descriptionId} className="mt-1 text-sm text-sv-text-muted">
+                {description}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="-mt-1 -mr-1 flex size-8 shrink-0 items-center justify-center rounded-md text-sv-text-muted outline-none transition hover:bg-sv-surface-2 hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent/50 motion-reduce:transition-none"
+            className="-mt-1 -mr-1 flex size-11 shrink-0 items-center justify-center rounded-md text-sv-text-muted outline-none transition hover:bg-sv-surface-2 hover:text-sv-text focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface motion-reduce:transition-none sm:size-8"
           >
             <X className="size-4" />
           </button>

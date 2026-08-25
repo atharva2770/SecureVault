@@ -17,7 +17,7 @@ const cardVariants = cva('rounded-[var(--sv-radius)] text-sv-text', {
       paper: 'border border-sv-paper-border bg-sv-paper text-sv-paper-text shadow-card'
     },
     interactive: {
-      true: 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+      true: 'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:transition-none motion-reduce:hover:translate-y-0',
       false: ''
     }
   },

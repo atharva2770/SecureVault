@@ -80,9 +80,9 @@ export default function UnlockScreen(): React.JSX.Element {
         className="pointer-events-none absolute top-1/3 -right-40 size-[32rem] rounded-full bg-[color-mix(in_srgb,var(--accent-2)_18%,transparent)] blur-3xl"
       />
 
-      <div className="relative mx-auto grid min-h-dvh max-w-7xl items-center gap-10 px-5 py-16 sm:px-8 min-[960px]:grid-cols-[1.1fr_0.9fr] min-[960px]:gap-16 min-[960px]:py-10">
-        {/* Left — brand / marketing */}
-        <section className="hidden flex-col justify-center min-[960px]:flex">
+      <div className="relative mx-auto grid min-h-dvh max-w-7xl items-center gap-8 px-4 py-16 sm:px-8 sm:py-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 lg:py-10">
+        {/* Left — brand / marketing (desktop). Tablet gets a compact strip above the card. */}
+        <section className="hidden flex-col justify-center lg:flex">
           <div className="flex items-center gap-2.5">
             <div className="flex size-9 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-[linear-gradient(135deg,var(--accent-primary),var(--accent-2))] text-sv-accent-fg shadow-card">
               <ShieldCheck className="size-5" />
@@ -153,8 +153,8 @@ export default function UnlockScreen(): React.JSX.Element {
             </div>
 
             <div className="p-6 sm:p-8">
-              {/* Mobile brand (left panel hidden) */}
-              <div className="mb-6 flex items-center gap-2.5 min-[960px]:hidden">
+              {/* Mobile / tablet brand (left panel hidden below lg) */}
+              <div className="mb-6 flex items-center gap-2.5 lg:hidden">
                 <div className="flex size-9 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-[linear-gradient(135deg,var(--accent-primary),var(--accent-2))] text-sv-accent-fg">
                   <ShieldCheck className="size-5" />
                 </div>
@@ -234,10 +234,27 @@ export default function UnlockScreen(): React.JSX.Element {
                 </Button>
               </form>
 
+              {/* Tablet: a few department chips so the collapsed hero still feels branded */}
+              <div className="mt-5 flex flex-wrap justify-center gap-1.5 lg:hidden">
+                {MODULE_THEMES.slice(0, 5).map((module) => (
+                  <span
+                    key={module.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-sv-border bg-sv-surface-2 px-2.5 py-1 text-2xs font-medium text-sv-text-muted"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-1.5 rounded-full"
+                      style={{ backgroundColor: module.colorVar }}
+                    />
+                    {module.label}
+                  </span>
+                ))}
+              </div>
+
               <div className="mt-6 border-t border-sv-border pt-4 text-center">
                 <button
                   type="button"
-                  className="text-xs text-sv-text-muted transition hover:text-sv-accent motion-reduce:transition-none"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md px-3 text-sm text-sv-text-muted outline-none transition hover:text-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface motion-reduce:transition-none"
                   onClick={() => {
                     setMode((m) => (m === 'login' ? 'register' : 'login'))
                     setError(null)

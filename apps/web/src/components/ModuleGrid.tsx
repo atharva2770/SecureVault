@@ -19,7 +19,7 @@ interface ModuleGridProps {
   onOpen: (folder: FolderDto) => void
 }
 
-const GRID = 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+const GRID = 'grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
 
 function ModuleSkeleton(): React.JSX.Element {
   return (

@@ -135,7 +135,7 @@ export function FileNameModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} size="md">
+    <Modal open={open} onClose={onClose} size="md" title="Retrieve a file" titleSrOnly>
       <div style={accentVars}>
         {/* Themed icon + breadcrumb */}
         <div className="flex items-center gap-3">
@@ -162,7 +162,7 @@ export function FileNameModal({
                 {folder?.name ?? 'Folder'}
               </span>
             </nav>
-            <h2 className="mt-0.5 text-base font-semibold tracking-tight text-sv-text">
+            <h2 className="mt-0.5 text-base font-semibold tracking-tight text-sv-text" aria-hidden="true">
               Retrieve a file
             </h2>
           </div>
@@ -189,7 +189,9 @@ export function FileNameModal({
             {/* Scanning progress: a moving gradient bar */}
             <div
               className="mt-4 h-1.5 w-full overflow-hidden rounded-full bg-sv-surface-2"
+              role="progressbar"
               aria-hidden={!submitting}
+              aria-label={submitting ? 'Verifying file name' : undefined}
             >
               {submitting ? (
                 <div
@@ -202,7 +204,7 @@ export function FileNameModal({
               ) : null}
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
@@ -249,11 +251,11 @@ export function FileNameModal({
               <p className="mt-3 text-xs text-sv-danger">{actionError}</p>
             ) : null}
 
-            <div className="mt-5 flex items-center justify-between gap-2">
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Button type="button" variant="ghost" onClick={retry}>
                 Retrieve another
               </Button>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   variant="outline"
@@ -278,7 +280,10 @@ export function FileNameModal({
 
         {phase === 'notfound' ? (
           <div className="mt-5">
-            <div className="flex items-start gap-3 rounded-[var(--sv-radius)] border border-sv-danger/30 bg-sv-danger/10 p-4">
+            <div
+              role="status"
+              className="flex items-start gap-3 rounded-[var(--sv-radius)] border border-sv-danger/30 bg-sv-danger/10 p-4"
+            >
               <SearchX className="mt-0.5 size-5 shrink-0 text-sv-danger" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-sv-text">No matching file</p>
@@ -289,7 +294,7 @@ export function FileNameModal({
                 </p>
               </div>
             </div>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="ghost" onClick={onClose}>
                 Close
               </Button>

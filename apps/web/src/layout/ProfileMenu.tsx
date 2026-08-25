@@ -35,7 +35,8 @@ function MenuItem({
   danger?: boolean
 }): React.JSX.Element {
   const className = cn(
-    'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition',
+    'flex w-full items-center gap-3 px-4 py-3 text-left text-sm outline-none transition max-sm:min-h-11',
+    'focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-inset',
     danger
       ? 'text-sv-danger hover:bg-sv-danger/10'
       : 'text-sv-text hover:bg-sv-surface-raised'
@@ -43,7 +44,7 @@ function MenuItem({
 
   if (to) {
     return (
-      <Link to={to} className={className} onClick={onClick}>
+      <Link to={to} role="menuitem" className={className} onClick={onClick}>
         <span className="text-sv-text-muted">{icon}</span>
         {label}
       </Link>
@@ -51,7 +52,7 @@ function MenuItem({
   }
 
   return (
-    <button type="button" className={className} onClick={onClick}>
+    <button type="button" role="menuitem" className={className} onClick={onClick}>
       <span className="text-sv-text-muted">{icon}</span>
       {label}
     </button>
@@ -94,7 +95,7 @@ export default function ProfileMenu({ open, onClose }: ProfileMenuProps): React.
   return (
     <div
       ref={panelRef}
-      className="absolute top-[calc(100%+8px)] right-0 z-50 w-[320px] overflow-hidden rounded-xl border border-sv-border bg-sv-surface shadow-[0_16px_48px_rgb(0_0_0_/0.45)]"
+      className="absolute top-[calc(100%+8px)] right-0 z-50 w-[min(320px,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-sv-border bg-sv-surface shadow-modal"
       role="menu"
     >
       <div className="flex items-start gap-3 px-4 py-4">

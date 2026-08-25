@@ -1017,7 +1017,7 @@ export default function VaultBrowser(): React.JSX.Element {
         <aside
           className={cn(
             'z-40 flex w-[min(100%,var(--sv-sidebar-width))] shrink-0 flex-col border-r border-sv-border bg-sv-surface',
-            'fixed inset-y-0 left-0 top-[var(--sv-header-height)] transition-transform duration-200 md:static md:translate-x-0',
+            'fixed inset-y-0 left-0 top-[var(--sv-header-height)] transition-transform duration-200 motion-reduce:transition-none md:static md:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
             sidebarCollapsed && 'md:hidden'
           )}
@@ -1032,7 +1032,7 @@ export default function VaultBrowser(): React.JSX.Element {
               <Button
                 size="icon"
                 variant="ghost"
-                className="size-9 md:hidden"
+                className="md:hidden"
                 onClick={() => setSidebarOpen(true)}
                 aria-label="Open navigation"
               >
@@ -1041,7 +1041,7 @@ export default function VaultBrowser(): React.JSX.Element {
               <Button
                 size="icon"
                 variant="ghost"
-                className="hidden size-8 md:inline-flex"
+                className="hidden md:inline-flex"
                 onClick={() => setSidebarCollapsed((v) => !v)}
                 aria-label={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
                 title={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
@@ -1055,7 +1055,6 @@ export default function VaultBrowser(): React.JSX.Element {
               <Button
                 size="icon"
                 variant="ghost"
-                className="size-9 sm:size-8"
                 disabled={navHistory.length <= 1}
                 onClick={goBack}
                 aria-label="Back"
@@ -1065,7 +1064,6 @@ export default function VaultBrowser(): React.JSX.Element {
               <Button
                 size="icon"
                 variant="ghost"
-                className="size-9 sm:size-8"
                 disabled={selection.type === 'root'}
                 onClick={goUp}
                 aria-label="Up one level"
@@ -1080,7 +1078,7 @@ export default function VaultBrowser(): React.JSX.Element {
                 <button
                   type="button"
                   className={cn(
-                    'shrink-0 rounded px-1.5 py-0.5 transition',
+                    'shrink-0 rounded px-1.5 py-1 outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent',
                     selection.type === 'root'
                       ? 'font-medium text-sv-text'
                       : 'text-sv-text-muted hover:bg-sv-surface-raised hover:text-sv-text'
@@ -1095,7 +1093,7 @@ export default function VaultBrowser(): React.JSX.Element {
                     <button
                       type="button"
                       className={cn(
-                        'max-w-[140px] truncate rounded px-1.5 py-0.5 transition sm:max-w-[160px]',
+                        'max-w-[140px] truncate rounded px-1.5 py-1 outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent sm:max-w-[160px]',
                         crumb.folderId === selectedFolderId
                           ? 'font-medium text-sv-text'
                           : 'text-sv-text-muted hover:bg-sv-surface-raised hover:text-sv-text'
@@ -1108,13 +1106,14 @@ export default function VaultBrowser(): React.JSX.Element {
                 ))}
               </nav>
 
-              <div className="relative min-w-0 flex-1 sm:w-44 sm:flex-none md:w-52">
+              <div className="relative min-w-0 flex-1 basis-full sm:basis-auto sm:w-44 sm:flex-none md:w-52">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sv-text-muted" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search…"
-                  className="h-9 w-full rounded-md border border-sv-border bg-sv-bg pr-2 pl-8 text-sm text-sv-text outline-none placeholder:text-sv-text-muted focus:border-sv-accent sm:h-8 sm:text-xs"
+                  placeholder="Filter this folder…"
+                  aria-label="Filter this folder"
+                  className="h-11 w-full rounded-md border border-sv-border bg-sv-bg pr-2 pl-8 text-sm text-sv-text outline-none placeholder:text-sv-text-muted focus:border-sv-accent focus:ring-2 focus:ring-sv-accent focus:ring-offset-2 focus:ring-offset-sv-surface sm:h-9 sm:text-xs"
                 />
               </div>
 

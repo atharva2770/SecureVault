@@ -271,7 +271,7 @@ export default function UsersPage(): React.JSX.Element {
       subtitle="Manage people, roles, and which modules each person can open."
     >
       {/* Tabs */}
-      <div className="mb-5 flex items-center gap-1 border-b border-sv-border">
+      <div role="tablist" aria-label="Admin sections" className="mb-5 flex items-center gap-1 overflow-x-auto border-b border-sv-border">
         <TabButton active={tab === 'users'} onClick={() => setTab('users')} icon={<Users className="size-4" />}>
           People
         </TabButton>
@@ -286,24 +286,25 @@ export default function UsersPage(): React.JSX.Element {
 
       {tab === 'users' ? (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative w-full max-w-xs">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sv-text-muted" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search people"
+                aria-label="Search people"
                 className="pl-9"
               />
             </div>
-            <Button onClick={() => setInviteOpen(true)}>
+            <Button onClick={() => setInviteOpen(true)} className="w-full sm:w-auto">
               <UserPlus />
               Invite user
             </Button>
           </div>
 
           <div className="overflow-x-auto rounded-[var(--sv-radius)] border border-sv-border">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>
                 <tr className="bg-sv-surface-2 text-left text-xs font-semibold uppercase tracking-wide text-sv-text-muted">
                   <th scope="col" className="px-4 py-3">Person</th>
@@ -495,9 +496,11 @@ function TabButton({
   return (
     <button
       type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={cn(
-        '-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent/50 motion-reduce:transition-none',
+        '-mb-px flex min-h-11 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:transition-none',
         active
           ? 'border-sv-accent text-sv-text'
           : 'border-transparent text-sv-text-muted hover:text-sv-text'
