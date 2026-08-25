@@ -100,6 +100,7 @@
   --color-sv-text-dim: var(--text-secondary);
   --color-sv-text-faint: var(--text-faint);
   --color-sv-accent: var(--accent-primary);
+  --color-sv-accent-2: var(--accent-2);
   --color-sv-accent-fg: #ffffff;
   --color-sv-danger: var(--accent-danger);
   --color-sv-success: var(--accent-success);
@@ -172,9 +173,13 @@
   --text-secondary: #9aa1ae;
   --text-faint: #828a99;
   --accent-primary: #6366f1;
+  --accent-2: #8b5cf6; /* violet — gradient partner for --accent-primary */
   --accent-success: #22c55e;
   --accent-warning: #f59e0b;
   --accent-danger: #ef4444;
+
+  /* Scrim behind modals/sheets (deep, near-black with blue cast) */
+  --sv-overlay: rgb(2 4 9 / 62%);
 
   /* Paper — warm off-white "document" surface (same in both themes) */
   --paper: #f7f3ea;
@@ -215,9 +220,13 @@
   --text-secondary: #565d6b;
   --text-faint: #6b7280;
   --accent-primary: #4f46e5;
+  --accent-2: #7c3aed; /* violet — gradient partner for --accent-primary */
   --accent-success: #15803d;
   --accent-warning: #b45309;
   --accent-danger: #dc2626;
+
+  /* Scrim behind modals/sheets (lighter, cool scrim for light UI) */
+  --sv-overlay: rgb(15 18 24 / 38%);
 
   /* Module accents — deepened (≈600-level) variant per accent so badges/labels
      keep AA contrast on light surfaces. This is the "slightly darkened variant
@@ -296,4 +305,34 @@
 
 .titlebar-no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Decorative / feedback animations (used via arbitrary `animate-[...]`).
+   Pair usages with `motion-reduce:animate-none` to respect reduced motion. */
+@keyframes sv-scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes sv-grid-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 44px 44px;
+  }
+}
+
+@keyframes sv-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
 }
