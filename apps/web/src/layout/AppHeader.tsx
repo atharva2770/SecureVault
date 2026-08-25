@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { Menu, Search, Shield } from 'lucide-react'
+import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { Menu, Shield } from 'lucide-react'
 
 import { useAuth } from '@/auth/AuthProvider'
+import { GlobalSearch } from '@/components/GlobalSearch'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { UserAvatar } from '@/components/UserAvatar'
 import { Button } from '@/components/ui/button'
@@ -16,24 +17,8 @@ interface AppHeaderProps {
 export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.Element {
   const { user } = useAuth()
   const location = useLocation()
-  const navigate = useNavigate()
-  const [params, setParams] = useSearchParams()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [query, setQuery] = useState(params.get('q') ?? '')
   const showSearch = location.pathname === '/'
-
-  useEffect(() => {
-    setQuery(params.get('q') ?? '')
-  }, [params])
-
-  function submitSearch(event: React.FormEvent): void {
-    event.preventDefault()
-    const next = new URLSearchParams(params)
-    const trimmed = query.trim()
-    if (trimmed) next.set('q', trimmed)
-    else next.delete('q')
-    navigate({ pathname: '/', search: next.toString() ? `?${next}` : '' })
-  }
 
   return (
     <header className="relative z-40 flex h-[var(--sv-header-height)] shrink-0 items-center gap-2 border-b border-sv-border bg-sv-surface px-2 sm:gap-3 sm:px-3">
@@ -55,40 +40,14 @@ export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.
         >
           <Shield className="size-6 shrink-0 text-sv-accent" />
           <span className="truncate text-base font-semibold tracking-tight text-sv-text">
-            SecureVault
+            DOCMAN
           </span>
         </Link>
       </div>
 
       <div className="flex min-w-0 flex-1 justify-center">
         {showSearch ? (
-          <form onSubmit={submitSearch} className="flex w-full max-w-xl items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-              <input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value)
-                  if (location.pathname === '/') {
-                    const next = new URLSearchParams(params)
-                    if (e.target.value) next.set('q', e.target.value)
-                    else next.delete('q')
-                    setParams(next, { replace: true })
-                  }
-                }}
-                placeholder="Search files in your vault"
-                className="h-10 w-full rounded-full border border-sv-border bg-sv-bg py-0 pr-4 pl-4 text-sm text-sv-text outline-none placeholder:text-sv-text-muted focus:border-sv-accent"
-              />
-            </div>
-            <Button
-              type="submit"
-              variant="secondary"
-              size="icon"
-              className="size-10 shrink-0 rounded-full"
-              aria-label="Search"
-            >
-              <Search className="size-4" />
-            </Button>
-          </form>
+          <GlobalSearch />
         ) : (
           <div className="hidden h-10 max-w-xl flex-1 sm:block" />
         )}

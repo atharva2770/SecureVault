@@ -33,6 +33,8 @@ import {
 import type { FileDto, FolderDto } from '@securevault/domain'
 import { EMPTY_RIGHTS } from '@securevault/domain'
 import { api } from '@/api/vault'
+import { useAuth } from '@/auth/AuthProvider'
+import ModuleGrid, { type ModuleGridItem } from '@/components/ModuleGrid'
 import MoveFileModal from '@/components/MoveFileModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
 import RenameFileModal from '@/components/RenameFileModal'
@@ -233,6 +235,7 @@ function FolderTreeItem({
 
 export default function VaultBrowser(): React.JSX.Element {
   const queryClient = useQueryClient()
+  const { isAdmin } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [selection, setSelection] = useState<Selection>({ type: 'root' })
   const [navHistory, setNavHistory] = useState<Selection[]>([{ type: 'root' }])
@@ -455,6 +458,21 @@ export default function VaultBrowser(): React.JSX.Element {
       .filter((f) => f.parentFolderId === selection.folderId)
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [folders, selection])
+
+  // Module cards for the dashboard (root view): one per category root, with the
+  // number of folders in that module and an accessibility flag.
+  const moduleItems = useMemo<ModuleGridItem[]>(() => {
+    return folders
+      .filter((f) => f.isCategoryRoot)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((root) => ({
+        folder: root,
+        folderCount: folders.filter(
+          (f) => !f.isCategoryRoot && f.categoryId === root.categoryId
+        ).length,
+        restricted: !root.rights.view || Boolean(root.traverseOnly)
+      }))
+  }, [folders])
 
   const q = search.trim().toLowerCase()
   const isSearching = q.length > 0
@@ -1275,7 +1293,14 @@ export default function VaultBrowser(): React.JSX.Element {
               </p>
             ) : null}
 
-            {loading ? (
+            {selection.type === 'root' && !isSearching ? (
+              <ModuleGrid
+                items={moduleItems}
+                loading={sidebarQuery.isLoading}
+                isAdmin={isAdmin}
+                onOpen={(folder) => openFolder(folder)}
+              />
+            ) : loading ? (
               <div className="flex h-40 items-center justify-center gap-2 text-sv-text-muted">
                 <Loader2 className="size-5 animate-spin" />
                 Loading…

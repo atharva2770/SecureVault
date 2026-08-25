@@ -26,3 +26,21 @@ export const MODULE_THEMES: ModuleTheme[] = [
 export const MODULE_THEME_BY_ID: Record<string, ModuleTheme> = Object.fromEntries(
   MODULE_THEMES.map((m) => [m.id, m])
 )
+
+/**
+ * Resolve a module theme from a category name or code (from the DB), tolerating
+ * naming variants. Falls back to the neutral "Other" theme.
+ */
+export function moduleThemeForCategory(nameOrCode: string | null | undefined): ModuleTheme {
+  const key = (nameOrCode ?? '').trim().toLowerCase()
+  const id =
+    key.includes('railway') ? 'railway'
+    : key.includes('defence') || key.includes('defense') ? 'defence'
+    : key.includes('engineer') || key === 'engg' ? 'engineering'
+    : key.includes('account') ? 'accounts'
+    : key === 'hr' || key.includes('human') ? 'hr'
+    : key === 'qa' || key.includes('quality') ? 'qa'
+    : key.includes('npd') || key.includes('product') ? 'npd'
+    : 'other'
+  return MODULE_THEME_BY_ID[id] ?? MODULE_THEME_BY_ID.other
+}

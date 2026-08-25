@@ -1,14 +1,33 @@
 import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { ArrowRight, Loader2, Lock, ShieldCheck } from 'lucide-react'
+import { ArrowRight, KeyRound, Layers, Loader2, Lock, ShieldCheck } from 'lucide-react'
 
 import { api } from '@/api/vault'
 import { useAuth } from '@/auth/AuthProvider'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { MODULE_THEMES } from '@/theme/modules'
+
+const FEATURES = [
+  {
+    icon: Layers,
+    title: 'Module-first structure',
+    description: 'Every department is a module; child folders open exactly as they are stored.'
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Rights-driven access',
+    description: 'People only ever see the modules and folders their role grants them.'
+  },
+  {
+    icon: KeyRound,
+    title: 'Name-verified retrieval',
+    description: 'Files unlock only when the entered name matches the vault record.'
+  }
+]
 
 export default function UnlockScreen(): React.JSX.Element {
   const { user, acceptAuth } = useAuth()
@@ -45,16 +64,83 @@ export default function UnlockScreen(): React.JSX.Element {
   const isLogin = mode === 'login'
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden">
+    <div className="relative min-h-dvh w-full overflow-x-hidden">
       {/* Screen-local theme toggle (no top bar on this route) */}
       <div className="fixed top-4 right-4 z-50">
         <ThemeToggle className="border border-sv-border/60 bg-sv-surface/70 backdrop-blur" />
       </div>
 
-      <div className="grid h-full min-[860px]:grid-cols-[1.05fr_1fr]">
-        <LoginHero />
+      {/* Ambient decoration */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-40 -left-32 size-[36rem] rounded-full bg-sv-accent/10 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/3 -right-40 size-[32rem] rounded-full bg-[color-mix(in_srgb,var(--accent-2)_18%,transparent)] blur-3xl"
+      />
 
-        <main className="flex items-center justify-center px-5 py-10 sm:px-8">
+      <div className="relative mx-auto grid min-h-dvh max-w-7xl items-center gap-10 px-5 py-16 sm:px-8 min-[960px]:grid-cols-[1.1fr_0.9fr] min-[960px]:gap-16 min-[960px]:py-10">
+        {/* Left — brand / marketing */}
+        <section className="hidden flex-col justify-center min-[960px]:flex">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-[linear-gradient(135deg,var(--accent-primary),var(--accent-2))] text-sv-accent-fg shadow-card">
+              <ShieldCheck className="size-5" />
+            </div>
+            <span className="text-lg font-semibold tracking-tight text-sv-text">DOCMAN</span>
+            <Badge variant="outline" size="sm" className="ml-1 uppercase tracking-wide">
+              Formerly SecureVault
+            </Badge>
+          </div>
+
+          <h1 className="mt-8 max-w-xl text-4xl font-semibold leading-[1.1] tracking-tight text-sv-text xl:text-5xl">
+            Every document,{' '}
+            <span className="bg-[linear-gradient(90deg,var(--accent-primary),var(--accent-2))] bg-clip-text text-transparent">
+              exactly where it belongs.
+            </span>
+          </h1>
+          <p className="mt-4 max-w-lg text-sm/6 text-sv-text-muted">
+            DOCMAN turns your team&apos;s paperwork into a clean, colour-coded vault. Departments
+            become modules, modules open into their real folder tree, and files release only to the
+            people with the right to see them.
+          </p>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-3">
+            {FEATURES.map((feature) => (
+              <Card key={feature.title} className="p-4">
+                <div className="flex size-9 items-center justify-center rounded-[calc(var(--sv-radius)-4px)] bg-sv-accent/12 text-sv-accent">
+                  <feature.icon className="size-5" />
+                </div>
+                <p className="mt-3 text-sm font-semibold text-sv-text">{feature.title}</p>
+                <p className="mt-1 text-xs/5 text-sv-text-muted">{feature.description}</p>
+              </Card>
+            ))}
+          </div>
+
+          <div className="mt-8">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-sv-text-faint">
+              Modules in your vault
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {MODULE_THEMES.map((module) => (
+                <span
+                  key={module.id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-sv-border bg-sv-surface px-3 py-1 text-xs font-medium text-sv-text-muted"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="size-1.5 rounded-full"
+                    style={{ backgroundColor: module.colorVar }}
+                  />
+                  {module.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Right — sign-in card */}
+        <section className="flex w-full items-center justify-center">
           <Card className="relative w-full max-w-md overflow-hidden">
             {/* Scanning progress bar on submit */}
             <div
@@ -67,17 +153,25 @@ export default function UnlockScreen(): React.JSX.Element {
             </div>
 
             <div className="p-6 sm:p-8">
-              <div className="mb-6 space-y-3">
-                <div className="flex size-11 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-[linear-gradient(135deg,var(--accent-primary),var(--accent-2))] text-sv-accent-fg shadow-card">
+              {/* Mobile brand (left panel hidden) */}
+              <div className="mb-6 flex items-center gap-2.5 min-[960px]:hidden">
+                <div className="flex size-9 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-[linear-gradient(135deg,var(--accent-primary),var(--accent-2))] text-sv-accent-fg">
+                  <ShieldCheck className="size-5" />
+                </div>
+                <span className="text-lg font-semibold tracking-tight text-sv-text">DOCMAN</span>
+              </div>
+
+              <div className="mb-6 flex items-start gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-sv-accent/12 text-sv-accent">
                   <Lock className="size-5" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-semibold tracking-tight text-sv-text">
-                    {isLogin ? 'Unlock your vault' : 'Create your vault'}
-                  </h1>
+                  <h2 className="text-xl font-semibold tracking-tight text-sv-text">
+                    {isLogin ? 'Sign in to DOCMAN' : 'Create your vault'}
+                  </h2>
                   <p className="mt-1 text-sm text-sv-text-muted">
                     {isLogin
-                      ? 'Sign in to access encrypted documents.'
+                      ? 'Access is scoped to your department rights.'
                       : 'Set up the master credential for this browser.'}
                   </p>
                 </div>
@@ -96,10 +190,11 @@ export default function UnlockScreen(): React.JSX.Element {
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     autoComplete="username"
-                    placeholder="you@department"
+                    placeholder="your.username"
                     required
                     minLength={3}
                     disabled={pending}
+                    autoFocus
                   />
                 </label>
 
@@ -128,11 +223,11 @@ export default function UnlockScreen(): React.JSX.Element {
                   {pending ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      {isLogin ? 'Unlocking…' : 'Creating…'}
+                      {isLogin ? 'Entering…' : 'Creating…'}
                     </>
                   ) : (
                     <>
-                      {isLogin ? 'Unlock vault' : 'Register & unlock'}
+                      {isLogin ? 'Enter vault' : 'Register & enter'}
                       <ArrowRight className="size-4" />
                     </>
                   )}
@@ -153,79 +248,8 @@ export default function UnlockScreen(): React.JSX.Element {
               </div>
             </div>
           </Card>
-        </main>
+        </section>
       </div>
     </div>
-  )
-}
-
-/* Decorative brand hero — colored accent panel so it reads intentionally in both
-   themes (no reliance on theme surface colors that wash out on white). */
-function LoginHero(): React.JSX.Element {
-  return (
-    <aside className="relative hidden overflow-hidden bg-[linear-gradient(135deg,var(--accent-primary),var(--accent-2))] text-white min-[860px]:flex min-[860px]:flex-col">
-      {/* Animated grid */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 animate-[sv-grid-drift_7s_linear_infinite] opacity-60 [mask-image:radial-gradient(120%_120%_at_30%_15%,#000,transparent_75%)] motion-reduce:animate-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgb(255 255 255 / 0.10) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.10) 1px, transparent 1px)',
-          backgroundSize: '44px 44px'
-        }}
-      />
-
-      {/* Concentric rings */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 -right-24 size-[520px] opacity-70"
-      >
-        <div className="absolute inset-0 rounded-full border border-white/15" />
-        <div className="absolute inset-10 rounded-full border border-white/12" />
-        <div className="absolute inset-24 rounded-full border border-dashed border-white/20 animate-[spin_22s_linear_infinite] motion-reduce:animate-none" />
-        <div className="absolute inset-36 rounded-full border border-white/10" />
-      </div>
-
-      {/* Soft glow blobs */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-16 -left-10 size-72 rounded-full bg-white/15 blur-3xl animate-[sv-float_9s_ease-in-out_infinite] motion-reduce:animate-none"
-      />
-
-      <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-12">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-[calc(var(--sv-radius)-2px)] bg-white/15 ring-1 ring-white/25 backdrop-blur">
-            <ShieldCheck className="size-5" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">DOCMAN</span>
-        </div>
-
-        <div className="max-w-md">
-          <h2 className="text-3xl font-semibold leading-tight tracking-tight xl:text-4xl">
-            Every document, encrypted and in its place.
-          </h2>
-          <p className="mt-4 max-w-sm text-sm/6 text-white/80">
-            A secure vault for your teams — organized by module, locked down by role, audited end to
-            end.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {MODULE_THEMES.map((module) => (
-            <span
-              key={module.id}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur"
-            >
-              <span
-                aria-hidden="true"
-                className="size-1.5 rounded-full"
-                style={{ backgroundColor: module.colorVar }}
-              />
-              {module.label}
-            </span>
-          ))}
-        </div>
-      </div>
-    </aside>
   )
 }
