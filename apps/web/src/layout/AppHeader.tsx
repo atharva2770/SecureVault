@@ -1,114 +1,99 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { Menu, Search, Shield, X } from 'lucide-react'
+import { useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
 
 import { useAuth } from '@/auth/AuthProvider'
-import { GlobalSearch } from '@/components/GlobalSearch'
+import { BrandMark } from '@/components/BrandMark'
 import { ThemeToggle } from '@/components/ThemeToggle'
-import { UserAvatar } from '@/components/UserAvatar'
 import { Button } from '@/components/ui/button'
 import ProfileMenu from '@/layout/ProfileMenu'
+import { primaryRoleLabel, userInitials } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 
-interface AppHeaderProps {
-  onOpenSidebar?: () => void
-}
-
-export default function AppHeader({ onOpenSidebar }: AppHeaderProps): React.JSX.Element {
-  const { user } = useAuth()
+export default function AppHeader(): React.JSX.Element {
+  const { user, canManageUsers, signOut } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-  const searchPanelRef = useRef<HTMLDivElement>(null)
-  const showSearch = location.pathname === '/'
 
-  useEffect(() => {
-    setMobileSearchOpen(false)
-  }, [location.pathname])
+  const modulesActive =
+    location.pathname === '/' || location.pathname.startsWith('/m/')
+  const adminActive = location.pathname.startsWith('/admin')
 
-  useEffect(() => {
-    if (!mobileSearchOpen) return
-    function onKey(event: KeyboardEvent): void {
-      if (event.key === 'Escape') setMobileSearchOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [mobileSearchOpen])
+  async function handleSignOut(): Promise<void> {
+    setMenuOpen(false)
+    await signOut()
+    navigate('/login', { replace: true })
+  }
 
   return (
-    <header className="relative z-40 shrink-0 border-b border-sv-border bg-sv-surface">
-      <div className="flex h-[var(--sv-header-height)] items-center gap-2 px-2 sm:gap-3 sm:px-3">
-        <div className="flex min-w-0 items-center gap-1 sm:gap-2">
-          {onOpenSidebar ? (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-11 md:hidden"
-              onClick={onOpenSidebar}
-              aria-label="Open navigation"
+    <header className="sticky top-0 z-40 shrink-0 glass-panel border-x-0 border-t-0">
+      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-6">
+          <BrandMark to="/" />
+          <nav className="hidden items-center gap-1 md:flex">
+            <NavLink
+              to="/"
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm text-sv-text-muted transition-colors hover:bg-secondary hover:text-sv-text',
+                modulesActive && 'bg-secondary text-sv-text'
+              )}
             >
-              <Menu className="size-5" />
-            </Button>
-          ) : null}
-          <Link
-            to="/"
-            className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 outline-none hover:bg-sv-surface-raised focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface"
-          >
-            <Shield className="size-6 shrink-0 text-sv-accent" />
-            <span className="truncate text-base font-semibold tracking-tight text-sv-text">
-              DOCMAN
-            </span>
-          </Link>
+              Modules
+            </NavLink>
+            {canManageUsers ? (
+              <NavLink
+                to="/admin/users"
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-sm text-sv-text-muted transition-colors hover:bg-secondary hover:text-sv-text',
+                  adminActive && 'bg-secondary text-sv-text'
+                )}
+              >
+                Administration
+              </NavLink>
+            ) : null}
+          </nav>
         </div>
 
-        <div className="hidden min-w-0 flex-1 justify-center sm:flex">
-          {showSearch ? <GlobalSearch /> : <div className="h-10 max-w-xl flex-1" />}
-        </div>
-
-        <div className="relative ml-auto flex items-center gap-1">
-          {showSearch ? (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="sm:hidden"
-              aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
-              aria-expanded={mobileSearchOpen}
-              aria-controls="mobile-search-panel"
-              onClick={() => setMobileSearchOpen((open) => !open)}
-            >
-              {mobileSearchOpen ? <X className="size-5" /> : <Search className="size-5" />}
-            </Button>
+        <div className="relative flex shrink-0 items-center gap-3">
+          {user ? (
+            <div className="hidden text-right sm:block">
+              <p className="truncate text-sm font-semibold">{user.username}</p>
+              <p className="text-xs uppercase tracking-wider text-sv-text-muted">
+                {primaryRoleLabel(user)}
+              </p>
+            </div>
           ) : null}
-          <ThemeToggle />
           {user ? (
             <button
               type="button"
               className={cn(
-                'flex size-11 items-center justify-center rounded-full p-0.5 outline-none ring-offset-2 ring-offset-sv-surface transition hover:ring-2 hover:ring-sv-accent focus-visible:ring-2 focus-visible:ring-sv-accent motion-reduce:transition-none',
-                menuOpen && 'ring-2 ring-sv-accent'
+                'grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-brand text-sm font-bold text-sv-bg outline-none transition hover:brightness-110 focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-surface',
+                menuOpen && 'ring-2 ring-sv-accent ring-offset-2 ring-offset-sv-surface'
               )}
               aria-label="Account menu"
               aria-expanded={menuOpen}
               aria-haspopup="menu"
               onClick={() => setMenuOpen((open) => !open)}
             >
-              <UserAvatar username={user.username} size="sm" />
+              {userInitials(user.username)}
             </button>
           ) : null}
-
+          <ThemeToggle className="size-9 sm:size-9" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-9 max-sm:size-9"
+            aria-label="Sign out"
+            onClick={() => {
+              void handleSignOut()
+            }}
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
           <ProfileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         </div>
       </div>
-
-      {showSearch && mobileSearchOpen ? (
-        <div
-          id="mobile-search-panel"
-          ref={searchPanelRef}
-          className="border-t border-sv-border bg-sv-surface px-3 py-3 sm:hidden"
-        >
-          <GlobalSearch autoFocus />
-        </div>
-      ) : null}
     </header>
   )
 }

@@ -169,8 +169,8 @@
 [data-theme='dark'] {
   color-scheme: dark;
   --radius: 0.9rem;
-  --sv-titlebar-height: 56px;
-  --sv-header-height: 56px;
+  --sv-titlebar-height: 64px;
+  --sv-header-height: 64px;
   --sv-sidebar-width: min(280px, 86vw);
   --sv-radius: 14px;
 
@@ -345,8 +345,8 @@
   @media (min-width: 768px) {
     :root,
     [data-theme='dark'] {
-      --sv-titlebar-height: 56px;
-      --sv-header-height: 56px;
+      --sv-titlebar-height: 64px;
+      --sv-header-height: 64px;
       --sv-sidebar-width: 240px;
     }
   }

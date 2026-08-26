@@ -18,13 +18,14 @@ export function CardSkeleton({ className }: SkeletonProps): React.JSX.Element {
   return (
     <div
       className={cn(
-        'rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5 shadow-card',
+        'rounded-3xl border border-sv-border bg-sv-surface p-6 shadow-card',
         className
       )}
     >
-      <Skeleton className="size-11 rounded-[calc(var(--sv-radius)-2px)]" />
-      <Skeleton className="mt-4 h-4 w-2/3" />
-      <Skeleton className="mt-2 h-3 w-1/3" />
+      <Skeleton className="size-14 rounded-2xl" />
+      <Skeleton className="mt-5 h-5 w-2/3" />
+      <Skeleton className="mt-2 h-3 w-4/5" />
+      <Skeleton className="mt-6 h-3 w-1/3" />
     </div>
   )
 }

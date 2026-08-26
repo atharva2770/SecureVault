@@ -1,13 +1,12 @@
-import { Folder, Lock } from 'lucide-react'
+import { ArrowUpRight, FolderClosed, Lock } from 'lucide-react'
 
 import { moduleIcon } from '@/components/module-icons'
-import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 export interface ModuleCardProps {
   moduleId: string
   label: string
+  tagline?: string
   /** CSS var reference for this module's accent, e.g. 'var(--mod-hr)'. */
   colorVar: string
   folderCount: number
@@ -21,6 +20,7 @@ export interface ModuleCardProps {
 export function ModuleCard({
   moduleId,
   label,
+  tagline,
   colorVar,
   folderCount,
   locked = false,
@@ -31,13 +31,14 @@ export function ModuleCard({
   const interactive = !locked && Boolean(onOpen)
 
   return (
-    <Card
+    <div
       className={cn(
-        'group relative overflow-hidden shadow-card outline-none transition-all duration-fast ease-sv motion-reduce:transition-none',
+        'mod-tile group relative flex h-full flex-col rounded-3xl p-6 outline-none',
         interactive &&
-          'cursor-pointer hover:-translate-y-1 hover:scale-[1.02] hover:shadow-modal focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:hover:translate-y-0 motion-reduce:hover:scale-100',
+          'cursor-pointer focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg',
         locked && 'select-none'
       )}
+      style={{ '--mod': colorVar } as React.CSSProperties}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? `Open ${label}` : undefined}
@@ -53,53 +54,28 @@ export function ModuleCard({
           : undefined
       }
     >
-      {/* Animated corner accent — reveals on hover, consistent across themes */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-10 -right-10 size-28 rounded-full opacity-0 blur-2xl transition-all duration-med ease-sv group-hover:scale-125 group-hover:opacity-70 motion-reduce:transition-none"
-        style={{ backgroundColor: `color-mix(in srgb, ${colorVar} 45%, transparent)` }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute top-0 right-0 h-16 w-16 origin-top-right scale-0 opacity-0 transition-all duration-med ease-sv group-hover:scale-100 group-hover:opacity-100 motion-reduce:transition-none"
-        style={{
-          background: `linear-gradient(225deg, color-mix(in srgb, ${colorVar} 55%, transparent), transparent 60%)`
-        }}
-      />
-
-      <div className="relative p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div
-            className="flex size-11 items-center justify-center rounded-[calc(var(--sv-radius)-2px)]"
-            style={{
-              backgroundColor: `color-mix(in srgb, ${colorVar} 16%, transparent)`,
-              color: colorVar
-            }}
-          >
-            <Icon className="size-5" />
-          </div>
-          {restricted ? (
-            <Badge variant="danger" size="sm" className="gap-1">
-              <Lock className="size-3" />
-              Restricted
-            </Badge>
-          ) : null}
-        </div>
-
-        <h3 className="mt-4 truncate text-base font-semibold tracking-tight text-sv-text">
-          {label}
-        </h3>
-        <p className="mt-1 flex items-center gap-1.5 text-sm text-sv-text-muted">
-          <Folder className="size-3.5 shrink-0" />
-          <span>
-            {folderCount} {folderCount === 1 ? 'folder' : 'folders'}
+      <div className="flex items-start justify-between gap-4">
+        <span className="mod-icon grid h-14 w-14 shrink-0 place-items-center rounded-2xl">
+          <Icon className="h-7 w-7" />
+        </span>
+        {restricted ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-sv-danger/40 bg-sv-danger/10 px-2 py-0.5 text-2xs font-semibold text-sv-danger">
+            <Lock className="h-3 w-3" />
+            Restricted
           </span>
-        </p>
+        ) : (
+          <ArrowUpRight className="h-5 w-5 text-sv-text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-mod" />
+        )}
+      </div>
+      <h2 className="mt-5 font-display text-xl font-bold">{label}</h2>
+      {tagline ? <p className="mt-1 text-sm text-sv-text-muted">{tagline}</p> : null}
+      <div className="mt-6 flex items-center gap-2 text-xs font-semibold text-mod">
+        <FolderClosed className="h-4 w-4" />
+        {folderCount} sub-folder{folderCount === 1 ? '' : 's'}
       </div>
 
-      {/* Locked overlay — blurred, non-clickable, admin-awareness only */}
       {locked ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[var(--sv-radius)] bg-sv-surface/60 p-4 text-center backdrop-blur-sm">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-3xl bg-sv-surface/60 p-4 text-center backdrop-blur-sm">
           <div className="flex size-9 items-center justify-center rounded-full bg-sv-surface-2 text-sv-text-muted ring-1 ring-sv-border">
             <Lock className="size-4" />
           </div>
@@ -109,7 +85,7 @@ export function ModuleCard({
           </p>
         </div>
       ) : null}
-    </Card>
+    </div>
   )
 }
 

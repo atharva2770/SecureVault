@@ -1001,6 +1001,7 @@ export default function VaultBrowser(): React.JSX.Element {
     selection.type === 'folder' && Boolean(selectedFolder?.isCategoryRoot) && !isSearching
   const moduleTheme = moduleThemeForCategory(selectedFolder?.name)
   const clipboardCount = clipboard?.items.length ?? 0
+  const isDashboard = selection.type === 'root' && !isSearching
   const cutFileIds = useMemo(
     () =>
       clipboard?.mode === 'cut' ? new Set(clipboard.items.map((i) => i.fileId)) : new Set<string>(),
@@ -1099,6 +1100,20 @@ export default function VaultBrowser(): React.JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {isDashboard ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <PageTransition viewKey="dashboard">
+            <ModuleGrid
+              items={moduleItems}
+              loading={sidebarQuery.isLoading}
+              error={sidebarQuery.isError}
+              onRetry={() => void sidebarQuery.refetch()}
+              isAdmin={isAdmin}
+              onOpen={(folder) => openFolder(folder)}
+            />
+          </PageTransition>
+        </div>
+      ) : (
       <div className="relative flex min-h-0 flex-1">
         {/* Mobile drawer backdrop */}
         {sidebarOpen ? (
@@ -1414,18 +1429,7 @@ export default function VaultBrowser(): React.JSX.Element {
               </p>
             ) : null}
 
-            {selection.type === 'root' && !isSearching ? (
-              <PageTransition viewKey="dashboard">
-                <ModuleGrid
-                  items={moduleItems}
-                  loading={sidebarQuery.isLoading}
-                  error={sidebarQuery.isError}
-                  onRetry={() => void sidebarQuery.refetch()}
-                  isAdmin={isAdmin}
-                  onOpen={(folder) => openFolder(folder)}
-                />
-              </PageTransition>
-            ) : loading ? (
+            {loading ? (
               isModuleRoot ? (
                 <PageTransition viewKey="module">
                   <ModulePage
@@ -1744,6 +1748,7 @@ export default function VaultBrowser(): React.JSX.Element {
           </main>
         </section>
       </div>
+      )}
 
       {contextMenu ? (
         <VaultContextMenu
