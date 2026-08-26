@@ -2,6 +2,7 @@ import { AdminService } from '@securevault/core'
 import type { FastifyInstance } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
+import { apiConfig } from '../config'
 import { sendError } from '../httpErrors'
 import { requireSession } from '../plugins/auth'
 import {
@@ -19,6 +20,19 @@ import {
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   const admin = AdminService.getInstance()
   const r = app.withTypeProvider<ZodTypeProvider>()
+
+  r.get('/api/admin/storage', async (request, reply) => {
+    try {
+      requireSession(request)
+      return {
+        blobRoot: apiConfig.blobRoot,
+        layout: '<category>\\<subfolder>\\<fileId>.enc',
+        note: 'Explorer may open folders only. Ciphertext files are hidden system files — open documents from Docman.'
+      }
+    } catch (error) {
+      return sendError(reply, error)
+    }
+  })
 
   r.get('/api/admin/users', async (request, reply) => {
     try {

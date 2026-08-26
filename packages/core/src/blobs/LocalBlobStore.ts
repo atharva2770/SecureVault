@@ -8,6 +8,7 @@ import type { BlobStore } from './BlobStore'
 import {
   LOCAL_BLOB_ADAPTER,
   blobObjectKey,
+  folderBlobObjectKey,
   formatBlobUri,
   parseBlobUri
 } from './blobUri'
@@ -20,7 +21,8 @@ export class LocalBlobStore implements BlobStore {
 
   constructor(private readonly rootDir: string) {}
 
-  objectKey(userId: string, fileId: string): string {
+  objectKey(userId: string, fileId: string, folderRelPath?: string): string {
+    if (folderRelPath) return folderBlobObjectKey(folderRelPath, fileId)
     return blobObjectKey(userId, fileId)
   }
 

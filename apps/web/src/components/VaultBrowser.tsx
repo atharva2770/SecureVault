@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams, useNavigate, useParams, useLocation } from 'react-router-dom'
 import {
@@ -47,9 +47,10 @@ import VaultContextMenu, {
   type ContextMenuTarget,
   type VaultContextMenuState
 } from '@/components/VaultContextMenu'
-import UploadLockModal, { type PendingUpload } from '@/components/UploadLockModal'
+import IngestSessionBar from '@/components/IngestSessionBar'
 import { HighlightMatch } from '@/components/HighlightMatch'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { FileRowSkeleton } from '@/components/ui/skeleton'
@@ -60,6 +61,17 @@ import {
   SCOPED_SEARCH_STALE_MS
 } from '@/lib/search'
 import { cn } from '@/lib/utils'
+import {
+  displayNameFromFile,
+  downloadLocalFile,
+  isStagedId,
+  namesTakenInFolder,
+  newStagedId,
+  previewLocalFile,
+  stagedToFileDto,
+  uniqueDisplayName,
+  type StagedFile
+} from '@/lib/ingest'
 import { folderRightsOf, vaultActions } from '@/lib/vault-actions'
 import { moduleThemeForCategory } from '@/theme/modules'
 
@@ -335,9 +347,13 @@ export default function VaultBrowser(): React.JSX.Element {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<string | null>(null)
-  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null)
-  const [uploadQueue, setUploadQueue] = useState<PendingUpload[]>([])
+  const [ingestActive, setIngestActive] = useState(false)
+  const [staged, setStaged] = useState<StagedFile[]>([])
+  const [locking, setLocking] = useState(false)
+  const [lockCurrent, setLockCurrent] = useState(0)
+  const [lockTotal, setLockTotal] = useState(0)
   const [passwordTarget, setPasswordTarget] = useState<{
     file: FileDto
     mode: 'open' | 'download'
@@ -374,7 +390,6 @@ export default function VaultBrowser(): React.JSX.Element {
     queryFn: () => api.ensureSidebar()
   })
 
-  const categories = sidebarQuery.data?.categories ?? []
   const folders = sidebarQuery.data?.folders ?? []
 
   useEffect(() => {
@@ -449,25 +464,6 @@ export default function VaultBrowser(): React.JSX.Element {
     enabled: useServerFolderFilter,
     staleTime: SCOPED_SEARCH_STALE_MS,
     gcTime: SCOPED_SEARCH_GC_MS
-  })
-
-  const uploadMutation = useMutation({
-    mutationFn: (payload: {
-      file: File
-      displayName: string
-      categoryId: string
-      folderId?: string | null
-    }) => api.addFile(payload),
-    onSuccess: async (file) => {
-      setStatus(`Locked “${file.displayName}” in ${file.categoryName ?? 'vault'}.`)
-      await queryClient.invalidateQueries({ queryKey: ['files'] })
-      await queryClient.invalidateQueries({ queryKey: ['search'] })
-      await queryClient.invalidateQueries({ queryKey: ['sidebar'] })
-      void api.auth.touch()
-    },
-    onError: (error: Error) => {
-      setStatus(error.message || 'Upload failed.')
-    }
   })
 
   const deleteMutation = useMutation({
@@ -653,7 +649,7 @@ export default function VaultBrowser(): React.JSX.Element {
 
   const highlightQuery = isSearching ? search.trim() : isFolderFiltering ? folderFilterTerm : ''
 
-  const visibleFiles = useMemo(() => {
+  const vaultVisibleFiles = useMemo(() => {
     if (isSearching) return globalSearchQuery.data?.files ?? []
     if (useClientFolderFilter) return filePrefixIndex.prefix(folderFilterTerm)
     if (useServerFolderFilter) return folderSearchQuery.data?.items ?? []
@@ -668,6 +664,20 @@ export default function VaultBrowser(): React.JSX.Element {
     useClientFolderFilter,
     useServerFolderFilter
   ])
+
+  const stagedInFolder = useMemo(() => {
+    if (isSearching || !selectedFolderId) return []
+    const q = isFolderFiltering ? folderFilterTerm.toLowerCase() : ''
+    return staged
+      .filter((s) => s.folderId === selectedFolderId)
+      .filter((s) => !q || s.displayName.toLowerCase().startsWith(q) || s.originalName.toLowerCase().startsWith(q))
+      .map((s) => stagedToFileDto(s, folders.find((f) => f.folderId === s.folderId)))
+  }, [staged, selectedFolderId, folders, isSearching, isFolderFiltering, folderFilterTerm])
+
+  const visibleFiles = useMemo(
+    () => [...stagedInFolder, ...vaultVisibleFiles],
+    [stagedInFolder, vaultVisibleFiles]
+  )
 
   const visibleFolders = useMemo(() => {
     if (isSearching) {
@@ -688,21 +698,25 @@ export default function VaultBrowser(): React.JSX.Element {
 
   const fileById = useMemo(() => {
     const map = new Map<string, FileDto>()
+    for (const s of staged) {
+      map.set(s.localId, stagedToFileDto(s, folders.find((f) => f.folderId === s.folderId)))
+    }
     for (const f of visibleFiles) map.set(f.fileId, f)
     for (const f of filesQuery.data ?? []) map.set(f.fileId, f)
     for (const f of folderSearchQuery.data?.items ?? []) map.set(f.fileId, f)
     for (const f of globalSearchQuery.data?.files ?? []) map.set(f.fileId, f)
     return map
-  }, [visibleFiles, filesQuery.data, folderSearchQuery.data, globalSearchQuery.data])
+  }, [staged, folders, visibleFiles, filesQuery.data, folderSearchQuery.data, globalSearchQuery.data])
 
   const here = vaultActions(selectedFolder?.rights ?? EMPTY_RIGHTS)
   const canCreateSubfolder =
     selection.type === 'folder' && Boolean(selectedFolder?.categoryId) && here.newFolder
-  const canUploadHere = selection.type === 'folder' && here.upload
+  const managing = isAdmin && ingestActive
+  const canUploadHere = managing
   const canPasteHere =
-    selection.type === 'folder' && Boolean(clipboard?.items.length) && here.paste
-  const canCopyHere = here.copy
-  const canCutHere = here.cut
+    managing && selection.type === 'folder' && Boolean(clipboard?.items.length)
+  const canCopyHere = managing
+  const canCutHere = managing
 
   function actionsForFile(file: FileDto) {
     return vaultActions(folderRightsOf(folders, file.folderId))
@@ -710,6 +724,10 @@ export default function VaultBrowser(): React.JSX.Element {
 
   function selectedFilesHave(flag: 'copy' | 'cut' | 'delete' | 'rename'): boolean {
     if (!selectedFileIds.length) return false
+    if ((flag === 'cut' || flag === 'copy') && !managing) return false
+    if (managing && (flag === 'cut' || flag === 'copy' || flag === 'delete' || flag === 'rename')) {
+      return selectedFileIds.every((id) => Boolean(fileById.get(id)))
+    }
     return selectedFileIds.every((id) => {
       const file = fileById.get(id)
       if (!file) return false
@@ -772,6 +790,20 @@ export default function VaultBrowser(): React.JSX.Element {
     })
   }
 
+  function enterFolder(folder: FolderDto): void {
+    if (isAdmin && !ingestActive && !folder.isCategoryRoot) {
+      setFileNameFolder(folder)
+      return
+    }
+    openFolder(folder)
+  }
+
+  function startIngest(folder?: FolderDto | null): void {
+    if (!isAdmin) return
+    setIngestActive(true)
+    if (folder) openFolder(folder)
+  }
+
   function selectFile(fileId: string, event: React.MouseEvent | React.KeyboardEvent): void {
     setSelectedFolderRowId(null)
     const multi = 'ctrlKey' in event && (event.ctrlKey || event.metaKey)
@@ -818,18 +850,50 @@ export default function VaultBrowser(): React.JSX.Element {
       setStatus('Invalid paste destination.')
       return
     }
-    const incompatible = clipboard.items.some(
-      (item) => item.categoryId && item.categoryId !== target.categoryId
-    )
+    const incompatible =
+      !isAdmin &&
+      clipboard.items.some((item) => item.categoryId && item.categoryId !== target.categoryId)
     if (incompatible) {
       setStatus('Files can only be pasted into the same category.')
       return
     }
-    await pasteMutation.mutateAsync({
-      mode: clipboard.mode,
-      fileIds: clipboard.items.map((i) => i.fileId),
-      targetFolderId
-    })
+
+    const stagedIds = clipboard.items.map((i) => i.fileId).filter(isStagedId)
+    const vaultIds = clipboard.items.map((i) => i.fileId).filter((id) => !isStagedId(id))
+
+    if (stagedIds.length) {
+      setStaged((prev) => {
+        if (clipboard.mode === 'copy') {
+          const clones = prev
+            .filter((s) => stagedIds.includes(s.localId))
+            .map((s) => {
+              const taken = namesTakenInFolder(targetFolderId, prev, filesQuery.data ?? [])
+              return {
+                ...s,
+                localId: newStagedId(),
+                folderId: targetFolderId,
+                displayName: uniqueDisplayName(s.displayName, taken),
+                status: 'ready' as const,
+                error: undefined
+              }
+            })
+          return [...prev, ...clones]
+        }
+        return prev.map((s) =>
+          stagedIds.includes(s.localId) ? { ...s, folderId: targetFolderId } : s
+        )
+      })
+    }
+
+    if (vaultIds.length) {
+      await pasteMutation.mutateAsync({
+        mode: clipboard.mode,
+        fileIds: vaultIds,
+        targetFolderId
+      })
+    }
+
+    if (clipboard.mode === 'cut') setClipboard(null)
     setContextMenu(null)
   }
 
@@ -843,24 +907,11 @@ export default function VaultBrowser(): React.JSX.Element {
       setStatus('Clipboard is empty.')
       return
     }
-    if (selection.type !== 'folder' || !selection.folderId || !selection.categoryId) {
-      setStatus('Open a category folder before pasting.')
+    if (selection.type !== 'folder' || !selection.folderId) {
+      setStatus('Open a folder before pasting.')
       return
     }
-
-    const incompatible = clipboard.items.some(
-      (item) => item.categoryId && item.categoryId !== selection.categoryId
-    )
-    if (incompatible) {
-      setStatus('Files can only be pasted into the same category.')
-      return
-    }
-
-    await pasteMutation.mutateAsync({
-      mode: clipboard.mode,
-      fileIds: clipboard.items.map((i) => i.fileId),
-      targetFolderId: selection.folderId
-    })
+    await pasteIntoFolder(selection.folderId)
   }
 
   function deleteSelectedFolder(folderId: string): void {
@@ -874,20 +925,34 @@ export default function VaultBrowser(): React.JSX.Element {
 
   function deleteSelectedFiles(fileIds = selectedFileIds): void {
     if (!fileIds.length) return
-    const allowed = fileIds.every((id) => {
+    const stagedIds = fileIds.filter(isStagedId)
+    const vaultIds = fileIds.filter((id) => !isStagedId(id))
+
+    if (stagedIds.length) {
+      setStaged((prev) => prev.filter((s) => !stagedIds.includes(s.localId)))
+      setSelectedFileIds((prev) => prev.filter((id) => !stagedIds.includes(id)))
+      setStatus(
+        stagedIds.length === 1
+          ? 'Removed from ingest (was not locked yet).'
+          : `Removed ${stagedIds.length} staged files.`
+      )
+    }
+
+    if (!vaultIds.length) return
+    const allowed = vaultIds.every((id) => {
       const file = fileById.get(id)
-      return file ? actionsForFile(file).delete : false
+      return file ? actionsForFile(file).delete || managing : false
     })
     if (!allowed) {
       setStatus('You do not have Delete on this folder.')
       return
     }
     const ok = window.confirm(
-      fileIds.length === 1
+      vaultIds.length === 1
         ? 'Delete this file from the vault?'
-        : `Delete ${fileIds.length} files from the vault?`
+        : `Delete ${vaultIds.length} files from the vault?`
     )
-    if (ok) void deleteMutation.mutateAsync(fileIds)
+    if (ok) void deleteMutation.mutateAsync(vaultIds)
   }
 
   function copySelection(): void {
@@ -940,32 +1005,44 @@ export default function VaultBrowser(): React.JSX.Element {
     )
   }
 
-  function enqueueUploads(items: PendingUpload[]): void {
-    if (!items.length) return
-    setUploadQueue((prev) => {
-      const next = [...prev, ...items.slice(1)]
-      setPendingUpload(items[0])
+  function stageIncomingFiles(files: FileList | File[] | null): void {
+    if (!isAdmin) return
+    if (!ingestActive) {
+      setStatus('Start an ingest session first (Manage files, or No fetch, upload).')
+      return
+    }
+    if (selection.type !== 'folder' || !selection.folderId) {
+      setStatus('Open a folder before adding files.')
+      return
+    }
+    const list = files instanceof FileList ? Array.from(files) : (files ?? [])
+    if (!list.length) return
+    const folderId = selection.folderId
+    setStaged((prev) => {
+      const next = [...prev]
+      for (const file of list) {
+        const taken = namesTakenInFolder(folderId, next, filesQuery.data ?? [])
+        next.push({
+          localId: newStagedId(),
+          file,
+          originalName: file.name,
+          displayName: uniqueDisplayName(displayNameFromFile(file.name), taken),
+          folderId,
+          addedAt: new Date().toISOString(),
+          status: 'ready'
+        })
+      }
       return next
     })
-  }
-
-  function advanceUploadQueue(): void {
-    setUploadQueue((prev) => {
-      const [next, ...rest] = prev
-      setPendingUpload(next ?? null)
-      return rest
-    })
+    setStatus(
+      list.length === 1
+        ? 'File staged. Sort it, then Lock & finish to encrypt.'
+        : `Staged ${list.length} files. Sort them, then Lock & finish to encrypt.`
+    )
   }
 
   function handleFileInput(files: FileList | null): void {
-    if (!canUploadHere) return
-    if (!files?.length) return
-    enqueueUploads(
-      Array.from(files).map((file) => ({
-        file,
-        originalName: file.name
-      }))
-    )
+    stageIncomingFiles(files)
   }
 
   function handleDrop(event: React.DragEvent<HTMLElement>): void {
@@ -974,42 +1051,95 @@ export default function VaultBrowser(): React.JSX.Element {
     if (!canUploadHere) return
     const dropped = Array.from(event.dataTransfer.files)
     if (!dropped.length) return
-    enqueueUploads(
-      dropped.map((file) => ({
-        file,
-        originalName: file.name
-      }))
+    stageIncomingFiles(dropped)
+  }
+
+  function finishIngest(message?: string): void {
+    setStaged([])
+    setIngestActive(false)
+    setClipboard(null)
+    setSelectedFileIds([])
+    setStatus(message ?? 'Cycle locked. Files are encrypted in the vault.')
+    navigateTo({ type: 'root' })
+    void queryClient.invalidateQueries({ queryKey: ['files'] })
+    void queryClient.invalidateQueries({ queryKey: ['search'] })
+    void queryClient.invalidateQueries({ queryKey: ['sidebar'] })
+  }
+
+  function discardIngest(): void {
+    if (locking) return
+    if (staged.length) {
+      const ok = window.confirm(
+        `Discard ${staged.length} file${staged.length === 1 ? '' : 's'} that are not yet locked?`
+      )
+      if (!ok) return
+    }
+    finishIngest('Ingest discarded. Nothing new was locked.')
+  }
+
+  async function lockAndFinish(): Promise<void> {
+    if (!isAdmin || locking) return
+    const items = staged.filter((s) => s.status !== 'locking')
+    if (!items.length) {
+      finishIngest('Ingest closed. No new files to lock.')
+      return
+    }
+    setLocking(true)
+    setLockTotal(items.length)
+    setLockCurrent(0)
+    const failed: StagedFile[] = []
+    let done = 0
+    for (const item of items) {
+      const folder = folders.find((f) => f.folderId === item.folderId)
+      try {
+        await api.addFile({
+          file: item.file,
+          displayName: item.displayName,
+          categoryId: folder?.categoryId ?? '',
+          folderId: item.folderId
+        })
+      } catch (err) {
+        failed.push({
+          ...item,
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Lock failed.'
+        })
+      }
+      done += 1
+      setLockCurrent(done)
+    }
+    setLocking(false)
+    if (failed.length) {
+      setStaged(failed)
+      setStatus(
+        failed.length === 1
+          ? `Could not lock “${failed[0].displayName}”: ${failed[0].error}`
+          : `${failed.length} files could not be locked. Fix them and try again.`
+      )
+      return
+    }
+    finishIngest(
+      items.length === 1
+        ? 'File encrypted and locked. Back at modules.'
+        : `${items.length} files encrypted and locked. Back at modules.`
     )
   }
 
-  async function confirmUpload(input: {
-    displayName: string
-    categoryId: string
-  }): Promise<void> {
-    if (!pendingUpload) return
-
-    let folderId: string | null = null
-    if (selection.type === 'folder' && selection.categoryId === input.categoryId) {
-      folderId = selection.folderId
-    }
-
-    try {
-      await uploadMutation.mutateAsync({
-        file: pendingUpload.file,
-        displayName: input.displayName,
-        categoryId: input.categoryId,
-        folderId
-      })
-      advanceUploadQueue()
-    } catch {
-      // surfaced via mutation
-    }
-  }
-
   async function moveFileToFolder(fileId: string, targetFolderId: string): Promise<void> {
+    if (!managing) {
+      setStatus('Start an ingest session to move files.')
+      return
+    }
     const target = folders.find((f) => f.folderId === targetFolderId)
-    if (!target?.rights.edit) {
-      setStatus('You do not have Edit on that folder.')
+    if (!target?.categoryId) {
+      setStatus('Invalid destination folder.')
+      return
+    }
+    if (isStagedId(fileId)) {
+      setStaged((prev) =>
+        prev.map((s) => (s.localId === fileId ? { ...s, folderId: targetFolderId } : s))
+      )
+      setMoveTarget(null)
       return
     }
     try {
@@ -1020,9 +1150,19 @@ export default function VaultBrowser(): React.JSX.Element {
   }
 
   useEffect(() => {
+    if (!staged.length) return
+    function onBeforeUnload(event: BeforeUnloadEvent): void {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [staged.length])
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (isTypingTarget(event.target)) return
-      if (passwordTarget || pendingUpload || moveTarget || renameTarget) return
+      if (passwordTarget || locking || moveTarget || renameTarget) return
 
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
@@ -1040,7 +1180,7 @@ export default function VaultBrowser(): React.JSX.Element {
         return
       }
       if (mod && key === 'v') {
-        if (!here.paste) return
+        if (!canPasteHere) return
         event.preventDefault()
         void pasteClipboard()
         return
@@ -1083,7 +1223,7 @@ export default function VaultBrowser(): React.JSX.Element {
     selection,
     visibleFiles,
     passwordTarget,
-    pendingUpload,
+    locking,
     moveTarget,
     renameTarget
   ])
@@ -1123,7 +1263,8 @@ export default function VaultBrowser(): React.JSX.Element {
     selection.type === 'folder' &&
     !isSearching &&
     !isFolderFiltering &&
-    (Boolean(selectedFolder?.isCategoryRoot) || childFolders.length > 0)
+    Boolean(selectedFolder?.isCategoryRoot) &&
+    !ingestActive
   const isImmersive = isDashboard || isFolderGrid
   const cutFileIds = useMemo(
     () =>
@@ -1137,11 +1278,13 @@ export default function VaultBrowser(): React.JSX.Element {
       pasteTargetFolderId ?? (selection.type === 'folder' ? selection.folderId : null)
     if (!targetId) return false
     const target = folders.find((f) => f.folderId === targetId)
-    if (!target?.categoryId || !target.rights.edit) return false
+    if (!target?.categoryId) return false
+    if (isAdmin) return managing
+    if (!target.rights.edit) return false
     return !clipboard.items.some(
       (item) => item.categoryId && item.categoryId !== target.categoryId
     )
-  }, [clipboard, pasteTargetFolderId, selection, folders])
+  }, [clipboard, pasteTargetFolderId, selection, folders, isAdmin, managing])
 
   const contextMenuAllows = useMemo(() => {
     if (!contextMenu) {
@@ -1150,22 +1293,17 @@ export default function VaultBrowser(): React.JSX.Element {
     const file =
       contextMenu.target.kind === 'file' ? fileById.get(contextMenu.target.fileId) : undefined
     const fileActs = file ? actionsForFile(file) : null
-    const folderId =
-      contextMenu.target.kind === 'folder'
-        ? contextMenu.target.folderId
-        : (pasteTargetFolderId ?? (selection.type === 'folder' ? selection.folderId : null))
-    const pasteActs = vaultActions(folderRightsOf(folders, folderId))
     return {
-      cut: Boolean(fileActs?.cut),
-      copy: Boolean(fileActs?.copy),
-      rename: Boolean(fileActs?.rename),
-      paste: pasteActs.paste,
+      cut: managing,
+      copy: managing,
+      rename: managing || Boolean(fileActs?.rename),
+      paste: managing,
       delete:
         contextMenu.target.kind === 'file'
-          ? Boolean(fileActs?.delete)
+          ? managing || Boolean(fileActs?.delete)
           : contextMenu.target.kind === 'folder' && contextMenu.target.deletable
     }
-  }, [contextMenu, fileById, folders, pasteTargetFolderId, selection])
+  }, [contextMenu, fileById, managing])
 
   const sidebar = (
     <>
@@ -1213,7 +1351,7 @@ export default function VaultBrowser(): React.JSX.Element {
               node={node}
               depth={0}
               selectedId={selectedFolderId}
-              onSelect={openFolder}
+              onSelect={enterFolder}
             />
           ))
         )}
@@ -1223,6 +1361,29 @@ export default function VaultBrowser(): React.JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {isAdmin ? (
+        <input
+          ref={uploadInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            handleFileInput(e.target.files)
+            e.target.value = ''
+          }}
+        />
+      ) : null}
+      {managing ? (
+        <IngestSessionBar
+          pendingCount={staged.length}
+          locking={locking}
+          lockCurrent={lockCurrent}
+          lockTotal={lockTotal}
+          onAdd={() => uploadInputRef.current?.click()}
+          onLock={() => void lockAndFinish()}
+          onDiscard={discardIngest}
+        />
+      ) : null}
       {isImmersive ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {isDashboard ? (
@@ -1263,8 +1424,23 @@ export default function VaultBrowser(): React.JSX.Element {
                 denied={Boolean(selectedFolder && !selectedFolder.rights.view && !selectedFolder.traverseOnly)}
                 folderFilter={folderFilter}
                 onFolderFilterChange={setFolderFilter}
-                onOpenFolder={openFolder}
-                onPickFile={(folder) => setFileNameFolder(folder)}
+                onOpenFolder={enterFolder}
+                onPickFile={(folder) => {
+                  if (isAdmin && ingestActive) openFolder(folder)
+                  else setFileNameFolder(folder)
+                }}
+                isAdmin={isAdmin}
+                ingestActive={ingestActive}
+                onStartIngest={() => startIngest(selectedFolder)}
+                onUpload={() => uploadInputRef.current?.click()}
+                onPaste={() => {
+                  if (selectedFolderId) void pasteIntoFolder(selectedFolderId)
+                }}
+                canPaste={canPasteHere}
+                pasteCount={clipboardCount}
+                pastePending={pasteMutation.isPending}
+                onPasteIntoFolder={(folder) => void pasteIntoFolder(folder.folderId)}
+                onFilesDropped={(files) => handleFileInput(files)}
               />
             </PageTransition>
           )}
@@ -1400,23 +1576,14 @@ export default function VaultBrowser(): React.JSX.Element {
               ) : null}
 
               {canUploadHere ? (
-                <label>
-                  <input
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      handleFileInput(e.target.files)
-                      e.target.value = ''
-                    }}
-                  />
-                  <Button asChild size="sm" className="h-9 gap-1.5 sm:h-8">
-                    <span className="cursor-pointer">
-                      <Upload className="size-3.5" />
-                      <span className="hidden xs:inline sm:inline">Upload</span>
-                    </span>
-                  </Button>
-                </label>
+                <Button
+                  size="sm"
+                  className="h-9 gap-1.5 sm:h-8"
+                  onClick={() => uploadInputRef.current?.click()}
+                >
+                  <Upload className="size-3.5" />
+                  <span className="hidden xs:inline sm:inline">Upload</span>
+                </Button>
               ) : null}
             </div>
 
@@ -1448,7 +1615,7 @@ export default function VaultBrowser(): React.JSX.Element {
                   Copy
                 </Button>
               ) : null}
-              {here.paste ? (
+              {canPasteHere || managing ? (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -1627,11 +1794,28 @@ export default function VaultBrowser(): React.JSX.Element {
                     icon={FolderOpen}
                     title="This folder is empty"
                     description={
-                      here.upload
-                        ? 'Upload files, create a folder, or paste with Ctrl+V.'
+                      managing
+                        ? 'Add files here, then cut and paste them into the right folders. Lock & finish encrypts the whole set.'
                         : here.copy
-                          ? 'You can open and copy files in this folder.'
+                          ? 'You can open and download files in this folder.'
                           : 'You can browse files in this folder.'
+                    }
+                    action={
+                      managing ? (
+                        <Button
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => uploadInputRef.current?.click()}
+                        >
+                          <Upload className="size-3.5" />
+                          Add files
+                        </Button>
+                      ) : isAdmin ? (
+                        <Button size="sm" className="gap-1.5" onClick={() => startIngest(selectedFolder)}>
+                          <Upload className="size-3.5" />
+                          Manage files
+                        </Button>
+                      ) : null
                     }
                   />
                 ) : (isSearching || isFolderFiltering) &&
@@ -1686,7 +1870,7 @@ export default function VaultBrowser(): React.JSX.Element {
                           }}
                           onDoubleClick={(e) => {
                             e.stopPropagation()
-                            openFolder(folder)
+                            enterFolder(folder)
                           }}
                           onContextMenu={(e) => {
                             openContextMenu(
@@ -1696,7 +1880,7 @@ export default function VaultBrowser(): React.JSX.Element {
                             )
                           }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') openFolder(folder)
+                            if (e.key === 'Enter') enterFolder(folder)
                           }}
                           onDragOver={(e) => {
                             if (!e.dataTransfer.types.includes('application/x-sv-file')) return
@@ -1747,7 +1931,7 @@ export default function VaultBrowser(): React.JSX.Element {
                               size="sm"
                               variant="ghost"
                               className="h-8 px-2 text-xs md:h-7"
-                              onClick={() => openFolder(folder)}
+                              onClick={() => enterFolder(folder)}
                             >
                               Open
                             </Button>
@@ -1772,16 +1956,21 @@ export default function VaultBrowser(): React.JSX.Element {
                     const selected = selectedFileIds.includes(file.fileId)
                     const isCut = cutFileIds.has(file.fileId)
                     const acts = actionsForFile(file)
+                    const stagedItem = isStagedId(file.fileId)
+                      ? staged.find((s) => s.localId === file.fileId)
+                      : undefined
+                    const pending = Boolean(stagedItem)
                     return (
                       <li key={file.fileId}>
                         <div
                           role="button"
                           tabIndex={0}
-                          draggable={acts.move}
+                          draggable={managing}
                           className={cn(
                             'flex cursor-default items-center gap-3 rounded-xl border border-sv-border/70 bg-sv-surface/60 px-3 py-3 transition md:grid md:grid-cols-[minmax(180px,2fr)_150px_120px_80px_180px] md:gap-2 md:rounded-none md:border-0 md:border-b md:border-sv-border/60 md:bg-transparent md:px-4 md:py-2',
                             selected && 'border-sv-accent/50 bg-sv-accent/10 md:bg-sv-accent/10',
                             isCut && 'opacity-50',
+                            pending && 'border-dashed',
                             !selected && 'hover:bg-sv-surface-raised/80'
                           )}
                           onClick={(e) => {
@@ -1792,6 +1981,10 @@ export default function VaultBrowser(): React.JSX.Element {
                             openContextMenu(e, { kind: 'file', fileId: file.fileId })
                           }}
                           onDoubleClick={() => {
+                            if (stagedItem) {
+                              previewLocalFile(stagedItem.file)
+                              return
+                            }
                             setPasswordError(null)
                             setPasswordTarget({ file, mode: 'open' })
                           }}
@@ -1806,22 +1999,31 @@ export default function VaultBrowser(): React.JSX.Element {
                           <div className="flex min-w-0 flex-1 items-center gap-2.5">
                             <FileGlyph file={file} />
                             <div className="min-w-0">
-                              <p className="truncate font-medium text-sv-text">
-                                <HighlightMatch text={file.displayName} query={highlightQuery} />
+                              <p className="flex min-w-0 items-center gap-2">
+                                <span className="truncate font-medium text-sv-text">
+                                  <HighlightMatch text={file.displayName} query={highlightQuery} />
+                                </span>
+                                {pending ? (
+                                  <Badge variant="warning" size="sm">
+                                    {stagedItem?.status === 'error' ? 'Lock failed' : 'Not locked'}
+                                  </Badge>
+                                ) : null}
                               </p>
                               <p className="flex items-center gap-1 truncate text-[11px] text-sv-text-muted">
-                                <Lock className="size-2.5 shrink-0 text-sv-success" />
+                                {pending ? null : (
+                                  <Lock className="size-2.5 shrink-0 text-sv-success" />
+                                )}
                                 <span className="truncate md:hidden">
                                   {formatBytes(file.sizeBytes)} · {fileTypeLabel(file)}
                                 </span>
                                 <span className="hidden truncate md:inline">
-                                  {file.originalFileName}
+                                  {stagedItem?.error || file.originalFileName}
                                 </span>
                               </p>
                             </div>
                           </div>
                           <span className="hidden truncate text-sm text-sv-text-muted md:block">
-                            {formatDate(file.updatedAt)}
+                            {pending ? 'In ingest' : formatDate(file.updatedAt)}
                           </span>
                           <span className="hidden truncate text-sm text-sv-text-muted md:block">
                             {fileTypeLabel(file)}
@@ -1833,13 +2035,17 @@ export default function VaultBrowser(): React.JSX.Element {
                             className="flex shrink-0 justify-end gap-0.5"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {acts.view ? (
+                            {pending || acts.view ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="size-8 md:size-7"
                                 title="View"
                                 onClick={() => {
+                                  if (stagedItem) {
+                                    previewLocalFile(stagedItem.file)
+                                    return
+                                  }
                                   setPasswordError(null)
                                   setPasswordTarget({ file, mode: 'open' })
                                 }}
@@ -1847,13 +2053,17 @@ export default function VaultBrowser(): React.JSX.Element {
                                 <Eye className="size-3.5" />
                               </Button>
                             ) : null}
-                            {acts.download ? (
+                            {pending || acts.download ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="size-8 md:size-7"
                                 title="Download"
                                 onClick={() => {
+                                  if (stagedItem) {
+                                    downloadLocalFile(stagedItem.file, stagedItem.originalName)
+                                    return
+                                  }
                                   setPasswordError(null)
                                   setPasswordTarget({ file, mode: 'download' })
                                 }}
@@ -1861,7 +2071,7 @@ export default function VaultBrowser(): React.JSX.Element {
                                 <Download className="size-3.5" />
                               </Button>
                             ) : null}
-                            {acts.move ? (
+                            {managing ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -1875,7 +2085,7 @@ export default function VaultBrowser(): React.JSX.Element {
                                 <MoveRight className="size-3.5" />
                               </Button>
                             ) : null}
-                            {acts.rename ? (
+                            {managing || acts.rename ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -1889,7 +2099,7 @@ export default function VaultBrowser(): React.JSX.Element {
                                 <Pencil className="size-3.5" />
                               </Button>
                             ) : null}
-                            {acts.delete ? (
+                            {managing || acts.delete ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -1964,27 +2174,6 @@ export default function VaultBrowser(): React.JSX.Element {
         />
       ) : null}
 
-      {pendingUpload ? (
-        <UploadLockModal
-          pending={pendingUpload}
-          categories={categories}
-          defaultCategoryId={
-            selection.type === 'folder' ? selection.categoryId : categories[0]?.categoryId
-          }
-          submitting={uploadMutation.isPending}
-          onCancel={() => advanceUploadQueue()}
-          onConfirm={(input) => {
-            void confirmUpload(input)
-          }}
-        />
-      ) : null}
-
-      {uploadQueue.length > 0 && pendingUpload ? (
-        <p className="pointer-events-none fixed bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full bg-sv-surface px-3 py-1 text-xs text-sv-text-muted shadow">
-          {uploadQueue.length} more file(s) waiting after this one
-        </p>
-      ) : null}
-
       {passwordTarget ? (
         <PasswordPromptModal
           file={passwordTarget.file}
@@ -2006,6 +2195,7 @@ export default function VaultBrowser(): React.JSX.Element {
           file={moveTarget}
           folders={folders}
           currentFolderId={moveTarget.folderId}
+          allowAnyFolder={isAdmin}
           submitting={moveMutation.isPending}
           error={moveError}
           onCancel={() => {
@@ -2028,6 +2218,16 @@ export default function VaultBrowser(): React.JSX.Element {
             setRenameError(null)
           }}
           onConfirm={(displayName) => {
+            if (isStagedId(renameTarget.fileId)) {
+              setStaged((prev) =>
+                prev.map((s) =>
+                  s.localId === renameTarget.fileId ? { ...s, displayName, status: 'ready', error: undefined } : s
+                )
+              )
+              setRenameTarget(null)
+              setRenameError(null)
+              return
+            }
             void renameMutation.mutateAsync({ fileId: renameTarget.fileId, displayName })
           }}
         />
@@ -2039,6 +2239,15 @@ export default function VaultBrowser(): React.JSX.Element {
         moduleName={breadcrumbs[0]?.name ?? selectedFolder?.name ?? 'Module'}
         theme={moduleTheme}
         onClose={() => setFileNameFolder(null)}
+        onManageFiles={
+          isAdmin
+            ? () => {
+                const folder = fileNameFolder
+                setFileNameFolder(null)
+                startIngest(folder)
+              }
+            : undefined
+        }
       />
     </div>
   )

@@ -1,8 +1,9 @@
-import { ChevronRight, FileStack, Folder, FolderOpen, Lock, Search } from 'lucide-react'
+import { ChevronRight, ClipboardPaste, FileStack, Folder, FolderOpen, Lock, Search, Upload } from 'lucide-react'
 import type { FolderDto } from '@securevault/domain'
 
 import { ModuleBackdrop } from '@/components/ModuleBackdrop'
 import { moduleIcon } from '@/components/module-icons'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SubfolderSkeleton } from '@/components/ui/skeleton'
 import type { ModuleTheme } from '@/theme/modules'
@@ -27,6 +28,16 @@ interface ModulePageProps {
   onOpenFolder: (folder: FolderDto) => void
   /** Name-verified retrieval on a leaf folder. */
   onPickFile: (folder: FolderDto) => void
+  isAdmin?: boolean
+  ingestActive?: boolean
+  onStartIngest?: () => void
+  onUpload?: () => void
+  onPaste?: () => void
+  canPaste?: boolean
+  pasteCount?: number
+  pastePending?: boolean
+  onPasteIntoFolder?: (folder: FolderDto) => void
+  onFilesDropped?: (files: FileList) => void
 }
 
 export function ModulePage({
@@ -41,11 +52,25 @@ export function ModulePage({
   folderFilter = '',
   onFolderFilterChange,
   onOpenFolder,
-  onPickFile
+  onPickFile,
+  isAdmin = false,
+  ingestActive = false,
+  onStartIngest,
+  onUpload,
+  onPaste,
+  canPaste = false,
+  pasteCount = 0,
+  pastePending = false,
+  onPasteIntoFolder,
+  onFilesDropped
 }: ModulePageProps): React.JSX.Element {
   const Icon = moduleIcon(theme.id)
 
   function openCard(folder: FolderDto): void {
+    if (isAdmin && !ingestActive) {
+      onPickFile(folder)
+      return
+    }
     const nested = childCountById.get(folder.folderId) ?? 0
     if (nested > 0) onOpenFolder(folder)
     else onPickFile(folder)
@@ -75,7 +100,25 @@ export function ModulePage({
   }
 
   return (
-    <div className="min-h-full" style={{ '--mod': theme.colorVar } as React.CSSProperties}>
+    <div
+      className="min-h-full"
+      style={{ '--mod': theme.colorVar } as React.CSSProperties}
+      onDragOver={
+        isAdmin && ingestActive && onFilesDropped
+          ? (e) => {
+              e.preventDefault()
+            }
+          : undefined
+      }
+      onDrop={
+        isAdmin && ingestActive && onFilesDropped
+          ? (e) => {
+              e.preventDefault()
+              if (e.dataTransfer.files.length) onFilesDropped(e.dataTransfer.files)
+            }
+          : undefined
+      }
+    >
       <div className="aurora-mod relative mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <ModuleBackdrop pattern={theme.pattern} />
 
@@ -114,6 +157,46 @@ export function ModulePage({
           </span>
         </header>
 
+        {isAdmin ? (
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            {ingestActive ? (
+              <>
+                <Button type="button" size="sm" className="h-10 gap-1.5" onClick={onUpload}>
+                  <Upload className="size-4" />
+                  Add files
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  className="h-10 gap-1.5"
+                  disabled={!canPaste || pastePending}
+                  onClick={onPaste}
+                  title="Paste into this folder (Ctrl+V)"
+                >
+                  <ClipboardPaste className="size-4" />
+                  Paste{pasteCount ? ` (${pasteCount})` : ''}
+                </Button>
+                <p className="text-xs text-sv-text-muted">
+                  Drop files here, then paste them into the right subfolder. Lock the cycle when the
+                  set is complete.
+                </p>
+              </>
+            ) : (
+              <>
+                <Button type="button" size="sm" className="h-10 gap-1.5" onClick={onStartIngest}>
+                  <Upload className="size-4" />
+                  Manage files
+                </Button>
+                <p className="text-xs text-sv-text-muted">
+                  Open a subfolder to retrieve a file by name, or start an ingest session to add and
+                  sort files before locking.
+                </p>
+              </>
+            )}
+          </div>
+        ) : null}
+
         {onFolderFilterChange ? (
           <div className="relative mt-6 max-w-md">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sv-text-muted" />
@@ -141,10 +224,11 @@ export function ModulePage({
               const nested = childCountById.get(folder.folderId) ?? 0
               return (
                 <li key={folder.folderId}>
+                  <div className="mod-tile group relative flex w-full items-center gap-4 rounded-2xl p-5">
                   <button
                     type="button"
                     onClick={() => openCard(folder)}
-                    className="mod-tile group flex w-full items-center gap-4 rounded-2xl p-5 text-left outline-none focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg"
+                    className="flex min-w-0 flex-1 items-center gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-sv-accent"
                   >
                     <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-mod text-sv-bg">
                       <Folder className="h-6 w-6" />
@@ -157,11 +241,33 @@ export function ModulePage({
                         <FileStack className="h-3.5 w-3.5" />
                         {nested > 0
                           ? `${nested} sub-folder${nested === 1 ? '' : 's'}`
-                          : 'Retrieve a file by name'}
+                          : isAdmin
+                            ? ingestActive
+                              ? 'Open folder · add, cut & paste files'
+                              : 'Retrieve by name, or start an ingest session'
+                            : 'Retrieve a file by name'}
                       </span>
                     </span>
                     <ChevronRight className="ml-auto h-5 w-5 shrink-0 text-sv-text-muted transition-transform group-hover:translate-x-1 group-hover:text-mod" />
                   </button>
+                  {isAdmin && ingestActive && canPaste && onPasteIntoFolder ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 shrink-0 gap-1 px-2 text-xs"
+                      disabled={pastePending}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onPasteIntoFolder(folder)
+                      }}
+                      title={`Paste into ${folder.name}`}
+                    >
+                      <ClipboardPaste className="size-3.5" />
+                      Paste
+                    </Button>
+                  ) : null}
+                  </div>
                 </li>
               )
             })}

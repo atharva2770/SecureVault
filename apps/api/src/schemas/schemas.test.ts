@@ -36,6 +36,13 @@ describe('request schemas', () => {
     expect(result.success).toBe(false)
   })
 
+  it('requires a destination folder on upload', () => {
+    const result = uploadFieldsSchema.safeParse({
+      displayName: 'doc.pdf'
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects upload fields that are not uuids', () => {
     const result = uploadFieldsSchema.safeParse({
       displayName: 'doc.pdf',

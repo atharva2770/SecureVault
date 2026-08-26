@@ -39,6 +39,15 @@ export { FolderService } from './folders/FolderService'
 export { AdminService } from './admin/AdminService'
 export { FileQueryService } from './files/FileQueryService'
 export { VaultFileService } from './files/VaultFileService'
+export {
+  SearchCache,
+  getSearchCache,
+  resetSearchCache,
+  SEARCH_CACHE_TTL_MS,
+  SEARCH_CACHE_MAX_ENTRIES
+} from './files/searchCache'
+export type { ScopedSearchCacheKey, GlobalSearchCacheKey } from './files/searchCache'
+export { logSlowSearch, SLOW_SEARCH_MS } from './files/searchTiming'
 export { toFileDto, guessMime, safeFileName } from './files/fileDto'
 export {
   sniffUploadMime,
@@ -64,11 +73,18 @@ export {
   WEB_FILE_SOURCE,
   formatBlobUri,
   parseBlobUri,
-  isWebBlobUri
+  isWebBlobUri,
+  folderBlobObjectKey
 } from './blobs/blobUri'
 export type { BlobStore } from './blobs/BlobStore'
 export { LocalBlobStore } from './blobs/LocalBlobStore'
-export { resolveVaultBlobRoot, resolveCiphertextPath } from './blobs/vaultPaths'
+export { resolveVaultBlobRoot, resolveCiphertextPath, DEFAULT_DOCMAN_FILES_ROOT } from './blobs/vaultPaths'
+export {
+  ensureDocmanDiskLayout,
+  ensureVaultFolderDirForId,
+  protectCiphertextFile,
+  docmanFilesRoot
+} from './blobs/vaultDiskLayout'
 export { unwrapFileDek } from './crypto/unwrapFileDek'
 
 export type { KeyWrappingProvider } from './kms/KeyWrappingProvider'

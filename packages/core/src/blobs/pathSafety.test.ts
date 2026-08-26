@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { blobObjectKey } from './blobUri'
+import { blobObjectKey, folderBlobObjectKey } from './blobUri'
 import type { BlobStore } from './BlobStore'
 import { resolveCiphertextPath, resolveVaultBlobRoot } from './vaultPaths'
 
@@ -29,6 +29,20 @@ describe('blobObjectKey', () => {
     expect(() => blobObjectKey('11111111-1111-4111-8111-111111111111', '..\\windows')).toThrow(
       'Invalid fileId.'
     )
+  })
+})
+
+describe('folderBlobObjectKey', () => {
+  it('places the uuid under the folder relative path', () => {
+    expect(
+      folderBlobObjectKey('HR/Personnel file', '11111111-1111-4111-8111-111111111111')
+    ).toBe('HR/Personnel file/11111111-1111-4111-8111-111111111111.enc')
+  })
+
+  it('rejects traversal in the folder path', () => {
+    expect(() =>
+      folderBlobObjectKey('../outside', '11111111-1111-4111-8111-111111111111')
+    ).toThrow('Invalid blob key.')
   })
 })
 

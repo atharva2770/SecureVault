@@ -7,7 +7,7 @@ import type { Readable } from 'node:stream'
 export interface BlobStore {
   readonly adapter: string
 
-  objectKey(userId: string, fileId: string): string
+  objectKey(userId: string, fileId: string, folderRelPath?: string): string
   toUri(key: string): string
   parseUri(uri: string): string | null
 

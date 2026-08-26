@@ -19,9 +19,16 @@ function workspaceRoot(): string {
   return process.cwd()
 }
 
+export function legacyWorkspaceBlobRoot(): string {
+  return resolve(workspaceRoot(), 'data/vault-blobs')
+}
+
+/** Ciphertext root. On Windows this is F:\Docman files unless VAULT_BLOB_ROOT is set. */
+export const DEFAULT_DOCMAN_FILES_ROOT = process.platform === 'win32' ? 'F:\\Docman files' : 'data/vault-blobs'
+
 /** Ciphertext root for the web vault. Must not sit under a directory Vite/the SPA can serve. */
 export function resolveVaultBlobRoot(rawOverride?: string): string {
-  const raw = (rawOverride ?? process.env.VAULT_BLOB_ROOT)?.trim() || 'data/vault-blobs'
+  const raw = (rawOverride ?? process.env.VAULT_BLOB_ROOT)?.trim() || DEFAULT_DOCMAN_FILES_ROOT
   const resolved = isAbsolute(raw) ? raw : resolve(workspaceRoot(), raw)
   return assertBlobRootNotWebServed(resolved)
 }

@@ -3,35 +3,25 @@ import { ChevronRight, Folder, Loader2 } from 'lucide-react'
 
 import type { FileDto, FolderDto } from '@securevault/domain'
 import { Button } from '@/components/ui/button'
+import { folderPathLabel } from '@/lib/folderPath'
 import { cn } from '@/lib/utils'
 
 interface MoveFileModalProps {
   file: FileDto
   folders: FolderDto[]
   currentFolderId: string | null
+  allowAnyFolder?: boolean
   submitting?: boolean
   error?: string | null
   onCancel: () => void
   onConfirm: (targetFolderId: string) => void
 }
 
-function folderPathLabel(
-  folder: FolderDto,
-  byId: Map<string, FolderDto>
-): string {
-  const parts: string[] = []
-  let cur: FolderDto | undefined = folder
-  while (cur) {
-    parts.unshift(cur.name)
-    cur = cur.parentFolderId ? byId.get(cur.parentFolderId) : undefined
-  }
-  return parts.join(' / ')
-}
-
 export default function MoveFileModal({
   file,
   folders,
   currentFolderId,
+  allowAnyFolder = false,
   submitting = false,
   error,
   onCancel,
@@ -42,16 +32,17 @@ export default function MoveFileModal({
     return folders
         .filter(
           (f) =>
-            f.categoryId === file.categoryId &&
+            (allowAnyFolder || f.categoryId === file.categoryId) &&
             f.folderId !== currentFolderId &&
-            f.rights.edit
+            f.rights.edit &&
+            !f.traverseOnly
         )
       .map((f) => ({
         folder: f,
         label: folderPathLabel(f, byId)
       }))
       .sort((a, b) => a.label.localeCompare(b.label))
-  }, [folders, file.categoryId, currentFolderId])
+  }, [folders, file.categoryId, currentFolderId, allowAnyFolder])
 
   const [selectedId, setSelectedId] = useState(destinations[0]?.folder.folderId ?? '')
 
@@ -68,7 +59,9 @@ export default function MoveFileModal({
         <div className="max-h-72 overflow-y-auto p-2">
           {destinations.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-sv-text-muted">
-              No other folders in this category. Create a subfolder first.
+              {allowAnyFolder
+                ? 'No other folders available.'
+                : 'No other folders in this category. Create a subfolder first.'}
             </p>
           ) : (
             destinations.map(({ folder, label }) => {

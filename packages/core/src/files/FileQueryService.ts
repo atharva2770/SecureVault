@@ -5,12 +5,14 @@ import { AccessControlService } from '../access/AccessControlService'
 import { AuditAction, recordAudit } from '../audit/AuditService'
 import { FolderService } from '../folders/FolderService'
 import { escapeLikePattern } from '../utils/likeEscape'
+import { getSearchCache } from './searchCache'
 import {
   decodeNameCursor,
   encodeNameCursor,
   parseOffsetCursor,
   toContainsQuery
 } from './searchCursors'
+import { logSlowSearch } from './searchTiming'
 
 /**
  * JSON file listing (no blob encrypt/decrypt) for the web API.
@@ -107,76 +109,110 @@ export class FileQueryService {
       limit?: number
     }
   ): Promise<FileSearchPageDto> {
+    const started = performance.now()
+    let cacheHit = false
     const folderId = input.folderId.trim()
     const prefix = input.q.trim().slice(0, 200)
-    if (!folderId) throw new Error('folderId is required.')
-    if (prefix.length < 2) return { items: [], total: 0, nextCursor: null }
+    try {
+      if (!folderId) throw new Error('folderId is required.')
+      if (prefix.length < 2) return { items: [], total: 0, nextCursor: null }
 
-    const rights = await this.acl.getEffectiveRights(folderId, userId)
-    if (!rights.view) {
-      await this.acl.require(folderId, 'view', userId)
-    }
+      const rights = await this.acl.getEffectiveRights(folderId, userId)
+      if (!rights.view) {
+        await this.acl.require(folderId, 'view', userId)
+      }
 
-    const folder = await this.db.prisma.folder.findFirst({
-      where: { folderId, isDeleted: false },
-      select: { folderId: true, categoryId: true }
-    })
-    if (!folder) throw new Error('Folder not found.')
+      const take = Math.min(Math.max(input.limit ?? 25, 1), 100)
+      const includeSubfolders = Boolean(input.includeSubfolders)
+      const cacheKey = {
+        userId,
+        folderId,
+        query: prefix,
+        includeSubfolders,
+        cursor: input.cursor,
+        limit: take
+      }
 
-    const scopeIds = await this.resolveFolderScope(userId, folderId, Boolean(input.includeSubfolders))
-    if (!scopeIds.length) return { items: [], total: 0, nextCursor: null }
-
-    const take = Math.min(Math.max(input.limit ?? 25, 1), 100)
-    const likePrefix = escapeLikePattern(prefix)
-    const cursor = input.cursor ? decodeNameCursor(input.cursor) : null
-
-    recordAudit({
-      action: AuditAction.SEARCH,
-      userId,
-      folderId,
-      categoryId: folder.categoryId,
-      details: `scoped:${prefix}`
-    })
-
-    const where = {
-      isDeleted: false,
-      folderId: { in: scopeIds },
-      ...(folder.categoryId && input.includeSubfolders ? { categoryId: folder.categoryId } : {}),
-      displayName: { startsWith: likePrefix },
-      ...(cursor
-        ? {
-            OR: [
-              { displayName: { gt: cursor.displayName } },
-              { displayName: cursor.displayName, fileId: { gt: cursor.fileId } }
-            ]
-          }
-        : {})
-    }
-
-    const [total, rows] = await Promise.all([
-      this.db.prisma.file.count({
-        where: {
-          isDeleted: false,
-          folderId: { in: scopeIds },
-          ...(folder.categoryId && input.includeSubfolders ? { categoryId: folder.categoryId } : {}),
-          displayName: { startsWith: likePrefix }
-        }
-      }),
-      this.db.prisma.file.findMany({
-        where,
-        include: { category: true },
-        orderBy: [{ displayName: 'asc' }, { fileId: 'asc' }],
-        take: take + 1
+      recordAudit({
+        action: AuditAction.SEARCH,
+        userId,
+        folderId,
+        details: `scoped:${prefix}`
       })
-    ])
 
-    const page = rows.slice(0, take)
-    const last = page[page.length - 1]
-    return {
-      items: page.map((file) => this.toSearchFileDto(file)),
-      total,
-      nextCursor:
-        rows.length > take && last ? encodeNameCursor(last.displayName, last.fileId) : null
+      const cached = getSearchCache().getScoped(cacheKey)
+      if (cached) {
+        cacheHit = true
+        return cached
+      }
+
+      const folder = await this.db.prisma.folder.findFirst({
+        where: { folderId, isDeleted: false },
+        select: { folderId: true, categoryId: true }
+      })
+      if (!folder) throw new Error('Folder not found.')
+
+      const scopeIds = await this.resolveFolderScope(userId, folderId, includeSubfolders)
+      if (!scopeIds.length) {
+        const empty = { items: [], total: 0, nextCursor: null }
+        getSearchCache().setScoped(cacheKey, empty)
+        return empty
+      }
+
+      const likePrefix = escapeLikePattern(prefix)
+      const cursor = input.cursor ? decodeNameCursor(input.cursor) : null
+
+      const where = {
+        isDeleted: false,
+        folderId: { in: scopeIds },
+        ...(folder.categoryId && includeSubfolders ? { categoryId: folder.categoryId } : {}),
+        displayName: { startsWith: likePrefix },
+        ...(cursor
+          ? {
+              OR: [
+                { displayName: { gt: cursor.displayName } },
+                { displayName: cursor.displayName, fileId: { gt: cursor.fileId } }
+              ]
+            }
+          : {})
+      }
+
+      const [total, rows] = await Promise.all([
+        this.db.prisma.file.count({
+          where: {
+            isDeleted: false,
+            folderId: { in: scopeIds },
+            ...(folder.categoryId && includeSubfolders ? { categoryId: folder.categoryId } : {}),
+            displayName: { startsWith: likePrefix }
+          }
+        }),
+        this.db.prisma.file.findMany({
+          where,
+          include: { category: true },
+          orderBy: [{ displayName: 'asc' }, { fileId: 'asc' }],
+          take: take + 1
+        })
+      ])
+
+      const page = rows.slice(0, take)
+      const last = page[page.length - 1]
+      const result = {
+        items: page.map((file) => this.toSearchFileDto(file)),
+        total,
+        nextCursor:
+          rows.length > take && last ? encodeNameCursor(last.displayName, last.fileId) : null
+      }
+      getSearchCache().setScoped(cacheKey, result)
+      return result
+    } finally {
+      logSlowSearch({
+        kind: 'scoped',
+        durationMs: performance.now() - started,
+        userId,
+        folderId,
+        queryLength: prefix.length,
+        cacheHit
+      })
     }
   }
 
@@ -197,57 +233,81 @@ export class FileQueryService {
     userId: string,
     input: { q: string; cursor?: string; limit?: number }
   ): Promise<VaultSearchResults> {
+    const started = performance.now()
+    let cacheHit = false
     const q = input.q.trim().slice(0, 200)
-    const fts = toContainsQuery(q)
-    if (!fts || q.length < 2) {
-      return { modules: [], folders: [], files: [], fileTotal: 0, nextCursor: null }
-    }
-
-    recordAudit({
-      action: AuditAction.SEARCH,
-      userId,
-      details: `global:${q}`
-    })
-
-    const take = Math.min(Math.max(input.limit ?? 25, 1), 100)
-    const skip = parseOffsetCursor(input.cursor)
-    const isAdmin = await this.acl.isAdmin(userId)
-
-    const folderRows = await this.folders.listFolders(userId)
-    const viewable = folderRows.filter((f) => f.rights.view && !f.traverseOnly)
-    const viewableIds = viewable.map((f) => f.folderId)
-    const qLower = q.toLowerCase()
-    const matchingFolders = viewable.filter((f) => f.name.toLowerCase().startsWith(qLower))
-
-    if (!isAdmin && viewableIds.length === 0) {
-      return {
-        modules: matchingFolders.filter((f) => f.isCategoryRoot),
-        folders: matchingFolders.filter((f) => !f.isCategoryRoot),
-        files: [],
-        fileTotal: 0,
-        nextCursor: null
-      }
-    }
-
     try {
-      const { items, total } = await this.runFullTextSearch({
-        fts,
-        folderIds: isAdmin ? null : viewableIds,
-        skip,
-        take
+      const fts = toContainsQuery(q)
+      if (!fts || q.length < 2) {
+        return { modules: [], folders: [], files: [], fileTotal: 0, nextCursor: null }
+      }
+
+      const take = Math.min(Math.max(input.limit ?? 25, 1), 100)
+      const cacheKey = { userId, query: q, cursor: input.cursor, limit: take }
+
+      recordAudit({
+        action: AuditAction.SEARCH,
+        userId,
+        details: `global:${q}`
       })
-      return {
-        modules: matchingFolders.filter((f) => f.isCategoryRoot),
-        folders: matchingFolders.filter((f) => !f.isCategoryRoot),
-        files: items,
-        fileTotal: total,
-        nextCursor: skip + items.length < total ? String(skip + take) : null
+
+      const cached = getSearchCache().getGlobal(cacheKey)
+      if (cached) {
+        cacheHit = true
+        return cached
       }
-    } catch (error) {
-      if (isFtsUnavailable(error)) {
-        throw new Error('Search is unavailable.')
+
+      const skip = parseOffsetCursor(input.cursor)
+      const isAdmin = await this.acl.isAdmin(userId)
+
+      const folderRows = await this.folders.listFolders(userId)
+      const viewable = folderRows.filter((f) => f.rights.view && !f.traverseOnly)
+      const viewableIds = viewable.map((f) => f.folderId)
+      const qLower = q.toLowerCase()
+      const matchingFolders = viewable.filter((f) => f.name.toLowerCase().startsWith(qLower))
+
+      if (!isAdmin && viewableIds.length === 0) {
+        const empty = {
+          modules: matchingFolders.filter((f) => f.isCategoryRoot),
+          folders: matchingFolders.filter((f) => !f.isCategoryRoot),
+          files: [],
+          fileTotal: 0,
+          nextCursor: null
+        }
+        getSearchCache().setGlobal(cacheKey, empty)
+        return empty
       }
-      throw error
+
+      try {
+        const { items, total } = await this.runFullTextSearch({
+          fts,
+          folderIds: isAdmin ? null : viewableIds,
+          skip,
+          take
+        })
+        const result = {
+          modules: matchingFolders.filter((f) => f.isCategoryRoot),
+          folders: matchingFolders.filter((f) => !f.isCategoryRoot),
+          files: items,
+          fileTotal: total,
+          nextCursor: skip + items.length < total ? String(skip + take) : null
+        }
+        getSearchCache().setGlobal(cacheKey, result)
+        return result
+      } catch (error) {
+        if (isFtsUnavailable(error)) {
+          throw new Error('Search is unavailable.')
+        }
+        throw error
+      }
+    } finally {
+      logSlowSearch({
+        kind: 'global',
+        durationMs: performance.now() - started,
+        userId,
+        queryLength: q.length,
+        cacheHit
+      })
     }
   }
 

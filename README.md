@@ -147,22 +147,10 @@ npm run db:generate
 ### 5. Start the web app
 
 ```bash
-npm start
-```
-
-or:
-
-```bash
 npm run dev
 ```
 
-This starts the API on port **4000** and the React UI on **http://localhost:5173**, and opens the browser. The **first registered user** automatically receives the **Admin** role. Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
-
-To run the UI only (API already running):
-
-```bash
-npm run dev:web
-```
+This starts the API and the UI together, then opens **http://localhost:5173**. The **first registered user** automatically receives the **Admin** role. Use the **profile avatar** (top right) for account, password, folder access, appearance, and (admins) user rights.
 
 ---
 
@@ -170,11 +158,7 @@ npm run dev:web
 
 | Command | Description |
 | --- | --- |
-| `npm start` | Open the **web** app (API + UI, browser) |
-| `npm run dev` | Same as `npm start` |
-| `npm run web` | Same as `npm start` |
-| `npm run dev:api` | Start only the local API on http://127.0.0.1:4000 |
-| `npm run dev:web` | Start only the React UI on http://localhost:5173 |
+| `npm run dev` | Start the app (API + UI, opens the browser) |
 | `npm run build` | Typecheck and build the web app |
 | `npm run typecheck` | Typecheck all workspaces |
 | `npm run format` | Format the repo with Prettier |
@@ -315,7 +299,7 @@ The rounded "vault" aesthetic uses a `--radius` base of `0.75rem`, with `rounded
 
 ## Roadmap
 
-- **Phase 5 (done)** — web-only client. `npm start` / `npm run dev` run the API and browser UI.
+- **Phase 5 (done)** — web-only client. `npm run dev` starts the API and the browser UI.
 
 ---
 

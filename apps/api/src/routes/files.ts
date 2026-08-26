@@ -3,14 +3,14 @@ import type { MultipartFile } from '@fastify/multipart'
 import { createReadStream } from 'node:fs'
 import { unlink } from 'node:fs/promises'
 import { extname } from 'node:path'
-import type { Readable } from 'node:stream'
-import type { FastifyInstance } from 'fastify'
+import { Readable } from 'node:stream'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import { apiConfig } from '../config'
 import { getVaultFileService } from '../filesContext'
 import { HttpError, sendError } from '../httpErrors'
-import { requireSession } from '../plugins/auth'
+import { requireAdmin, requireSession } from '../plugins/auth'
 import {
   downloadFileBodySchema,
   fileIdParamsSchema,
@@ -44,6 +44,49 @@ async function drainStream(stream: Readable): Promise<void> {
     stream.on('close', () => resolve())
     stream.resume()
   })
+}
+
+/**
+ * Collect multipart text fields and the file part.
+ * Fields after the file are only visible once the file is consumed, so if
+ * folderId/displayName are missing when the file arrives we buffer it.
+ */
+async function readMultipartUpload(request: FastifyRequest): Promise<{
+  uploaded: MultipartFile
+  body: Readable
+  fields: Record<string, string>
+}> {
+  const fields: Record<string, string> = {}
+  let uploaded: MultipartFile | undefined
+  let buffered: Buffer | undefined
+
+  for await (const part of request.parts()) {
+    if (part.type === 'file') {
+      if (part.fieldname !== 'file' || uploaded) {
+        await drainStream(part.file)
+        continue
+      }
+      uploaded = part
+      const haveMeta = Boolean(fields.displayName?.trim() && fields.folderId?.trim())
+      if (!haveMeta) {
+        buffered = await part.toBuffer()
+      } else {
+        break
+      }
+    } else {
+      fields[part.fieldname] = String(part.value ?? '')
+    }
+  }
+
+  if (!uploaded) {
+    throw new HttpError(400, 'A file part named "file" is required.')
+  }
+
+  return {
+    uploaded,
+    body: buffered ? Readable.from(buffered) : uploaded.file,
+    fields
+  }
 }
 
 function contentDisposition(fileName: string): string {
@@ -141,40 +184,41 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     '/api/files',
     { bodyLimit: apiConfig.maxUploadBytes },
     async (request, reply) => {
-    let uploaded: MultipartFile | undefined
+    let body: Readable | undefined
     try {
       const session = requireSession(request)
-      uploaded = await request.file()
-      if (!uploaded || uploaded.fieldname !== 'file') {
-        if (uploaded?.file) await drainStream(uploaded.file)
-        throw new HttpError(400, 'A file part named "file" is required.')
-      }
+      requireAdmin(request)
+      const upload = await readMultipartUpload(request)
+      body = upload.body
+      const uploaded = upload.uploaded
 
       const parsed = uploadFieldsSchema.safeParse({
-        displayName: multipartValue(uploaded.fields, 'displayName'),
-        categoryId: multipartValue(uploaded.fields, 'categoryId'),
-        folderId: multipartValue(uploaded.fields, 'folderId') || undefined
+        displayName: upload.fields.displayName || multipartValue(uploaded.fields, 'displayName'),
+        categoryId:
+          upload.fields.categoryId || multipartValue(uploaded.fields, 'categoryId') || undefined,
+        folderId: upload.fields.folderId || multipartValue(uploaded.fields, 'folderId') || undefined
       })
       if (!parsed.success) {
-        await drainStream(uploaded.file)
-        throw new HttpError(400, 'Invalid request.')
+        if (body.readable) await drainStream(body)
+        const folderMissing = Boolean(parsed.error.flatten().fieldErrors.folderId)
+        throw new HttpError(400, folderMissing ? 'Choose a destination folder.' : 'Invalid request.')
       }
 
       const record = await vault.addFile({
         userId: session.userId,
         displayName: parsed.data.displayName,
-        categoryId: parsed.data.categoryId,
-        folderId: parsed.data.folderId ?? null,
+        categoryId: parsed.data.categoryId ?? '',
+        folderId: parsed.data.folderId,
         originalFileName: uploaded.filename || 'upload.bin',
         mimeType: uploaded.mimetype || null,
-        body: uploaded.file,
+        body,
         maxBytes: apiConfig.maxUploadBytes
       })
 
       return reply.status(201).send(record)
     } catch (error) {
-      if (uploaded?.file.readable) {
-        await drainStream(uploaded.file)
+      if (body?.readable) {
+        await drainStream(body)
       }
       return sendError(reply, error)
     }
@@ -239,7 +283,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     { schema: { params: fileIdParamsSchema, body: moveOrCopyBodySchema } },
     async (request, reply) => {
       try {
-        const session = requireSession(request)
+        const session = requireAdmin(request)
         return await vault.moveFile(session.userId, {
           fileId: request.params.fileId,
           targetFolderId: request.body.targetFolderId
@@ -255,7 +299,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     { schema: { params: fileIdParamsSchema, body: moveOrCopyBodySchema } },
     async (request, reply) => {
       try {
-        const session = requireSession(request)
+        const session = requireAdmin(request)
         return await vault.copyFile(session.userId, {
           fileId: request.params.fileId,
           targetFolderId: request.body.targetFolderId

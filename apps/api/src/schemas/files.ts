@@ -40,6 +40,6 @@ export const renameFileBodySchema = z.strictObject({
 
 export const uploadFieldsSchema = z.strictObject({
   displayName: displayNameSchema,
-  categoryId: idSchema,
-  folderId: idSchema.optional()
+  categoryId: idSchema.optional(),
+  folderId: idSchema
 })

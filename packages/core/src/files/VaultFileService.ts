@@ -15,11 +15,12 @@ import { isWebBlobUri, WEB_FILE_SOURCE } from '../blobs/blobUri'
 import { resolveCiphertextPath } from '../blobs/vaultPaths'
 import { CryptoService } from '../crypto/CryptoService'
 import { unwrapFileDek } from '../crypto/unwrapFileDek'
-import { FolderService } from '../folders/FolderService'
 import type { KeyWrappingProvider } from '../kms/KeyWrappingProvider'
 import { secureZero } from '../utils/secure'
 import { toFileDto, safeFileName } from './fileDto'
+import { getSearchCache } from './searchCache'
 import { inspectUpload, limitReadable } from './sniffUpload'
+import { relativePathForFolderId, protectCiphertextFile, ensureVaultFolderDirForId } from '../blobs/vaultDiskLayout'
 
 export interface VaultUploadInput {
   userId: string
@@ -47,7 +48,6 @@ export interface VaultDownloadResult {
 export class VaultFileService {
   private readonly db = DBService.getInstance()
   private readonly crypto = CryptoService.getInstance()
-  private readonly folders = FolderService.getInstance()
   private readonly acl = AccessControlService.getInstance()
 
   constructor(
@@ -58,40 +58,40 @@ export class VaultFileService {
   async addFile(input: VaultUploadInput): Promise<FileDto> {
     const userId = input.userId
     const displayName = input.displayName?.trim()
-    const categoryId = input.categoryId?.trim()
     const originalFileName = input.originalFileName?.trim() || 'upload.bin'
 
+    if (!(await this.acl.isAdmin(userId))) {
+      throw new Error('Access denied. Only admins can upload files.')
+    }
     if (!displayName) throw new Error('File name is required.')
     if (displayName.length > 500) throw new Error('File name is too long.')
-    if (!categoryId) throw new Error('File type (category) is required.')
+
+    const folderId = input.folderId?.trim()
+    if (!folderId) throw new Error('Choose a destination folder.')
+
+    const folder = await this.db.prisma.folder.findFirst({
+      where: { folderId, isDeleted: false }
+    })
+    if (!folder) throw new Error('Folder not found.')
+    if (!folder.categoryId) throw new Error('Folder not found for this file type.')
+
+    await this.acl.require(folderId, 'edit', userId)
 
     const category = await this.db.prisma.fileCategory.findUnique({
-      where: { categoryId }
+      where: { categoryId: folder.categoryId }
     })
-    if (!category) {
-      throw new Error('Invalid file type.')
-    }
+    if (!category) throw new Error('Invalid file type.')
 
-    let folderId = input.folderId?.trim() || null
-    if (folderId) {
-      const folder = await this.db.prisma.folder.findFirst({
-        where: { folderId, categoryId, isDeleted: false }
-      })
-      if (!folder) {
-        throw new Error('Folder not found for this file type.')
-      }
-      await this.acl.require(folderId, 'edit', userId)
-    } else {
-      folderId = await this.folders.getCategoryRootFolderId(userId, categoryId)
-      await this.acl.require(folderId, 'edit', userId)
-    }
+    const categoryId = folder.categoryId
+    const folderRel = await relativePathForFolderId(folderId)
+    await ensureVaultFolderDirForId(folderId)
 
     const fileId = randomUUID()
     const sniffed = await inspectUpload(input.body, originalFileName)
     const body = limitReadable(sniffed.body, input.maxBytes ?? 100 * 1024 * 1024)
     const mimeType = sniffed.mimeType
     const accessPasswordHash = await this.crypto.hashAccessPassword(displayName)
-    const key = this.blobs.objectKey(userId, fileId)
+    const key = this.blobs.objectKey(userId, fileId, folderRel)
     const destPath = await this.blobs.prepareWrite(key)
     const uri = this.blobs.toUri(key)
 
@@ -102,6 +102,7 @@ export class VaultFileService {
       dek = this.crypto.generateDEK()
       const encrypted = await this.crypto.encryptReadable(body, dek, destPath)
       blobWritten = true
+      await protectCiphertextFile(destPath)
 
       const wrappedDEK = Buffer.from(await this.kms.wrapDek(dek))
       secureZero(dek)
@@ -137,6 +138,7 @@ export class VaultFileService {
         categoryId: record.categoryId,
         details: `web:${displayName} [${category.name}]`
       })
+      getSearchCache().invalidateOnFileMutation(record.folderId)
 
       return toFileDto(record)
     } catch (error) {
@@ -236,11 +238,15 @@ export class VaultFileService {
       categoryId: record.categoryId,
       details: `web:${record.displayName}`
     })
+    getSearchCache().invalidateOnFileMutation(record.folderId)
 
     return toFileDto(record)
   }
 
   async moveFile(userId: string, payload: MoveFilePayload): Promise<FileDto> {
+    if (!(await this.acl.isAdmin(userId))) {
+      throw new Error('Access denied. Only admins can move files.')
+    }
     const fileId = payload.fileId?.trim()
     const targetFolderId = payload.targetFolderId?.trim()
 
@@ -254,26 +260,37 @@ export class VaultFileService {
     await this.acl.require(existing.folderId, 'delete', userId)
     await this.acl.require(targetFolderId, 'edit', userId)
 
+    const isAdmin = await this.acl.isAdmin(userId)
     const target = await this.db.prisma.folder.findFirst({
       where: {
         folderId: targetFolderId,
         isDeleted: false,
-        categoryId: existing.categoryId
+        ...(isAdmin ? {} : { categoryId: existing.categoryId })
       }
     })
     if (!target) {
-      throw new Error('Destination folder not found in this category.')
+      throw new Error(
+        isAdmin ? 'Folder not found.' : 'Destination folder not found in this category.'
+      )
     }
 
     if (existing.folderId === target.folderId) {
       return toFileDto(existing)
     }
 
+    const storedBlobPath = await this.relocateBlob(
+      userId,
+      existing.fileId,
+      existing.storedBlobPath,
+      target.folderId
+    )
+
     const record = await this.db.prisma.file.update({
       where: { fileId: existing.fileId },
       data: {
         folderId: target.folderId,
         categoryId: target.categoryId,
+        storedBlobPath,
         updatedAt: new Date()
       },
       include: { category: true }
@@ -285,11 +302,16 @@ export class VaultFileService {
       fileId: record.fileId,
       details: `web-move:${target.name}`
     })
+    getSearchCache().invalidateOnFileMutation(existing.folderId)
+    getSearchCache().invalidateOnFileMutation(record.folderId)
 
     return toFileDto(record)
   }
 
   async copyFile(userId: string, payload: CopyFilePayload): Promise<FileDto> {
+    if (!(await this.acl.isAdmin(userId))) {
+      throw new Error('Access denied. Only admins can copy files into folders.')
+    }
     const fileId = payload.fileId?.trim()
     const targetFolderId = payload.targetFolderId?.trim()
 
@@ -303,26 +325,32 @@ export class VaultFileService {
     await this.acl.require(existing.folderId, 'copy', userId)
     await this.acl.require(targetFolderId, 'edit', userId)
 
+    const isAdmin = await this.acl.isAdmin(userId)
     const target = await this.db.prisma.folder.findFirst({
       where: {
         folderId: targetFolderId,
         isDeleted: false,
-        categoryId: existing.categoryId
+        ...(isAdmin ? {} : { categoryId: existing.categoryId })
       }
     })
     if (!target) {
-      throw new Error('Destination folder not found in this category.')
+      throw new Error(
+        isAdmin ? 'Folder not found.' : 'Destination folder not found in this category.'
+      )
     }
 
     const fromPath = await resolveCiphertextPath(existing.storedBlobPath, this.blobs)
     const newFileId = randomUUID()
-    const toKey = this.blobs.objectKey(userId, newFileId)
+    const folderRel = await relativePathForFolderId(target.folderId)
+    await ensureVaultFolderDirForId(target.folderId)
+    const toKey = this.blobs.objectKey(userId, newFileId, folderRel)
     const toPath = await this.blobs.prepareWrite(toKey)
     let blobWritten = false
 
     try {
       await copyFile(fromPath, toPath)
       blobWritten = true
+      await protectCiphertextFile(toPath)
 
       const displayName = await this.uniqueCopyName(target.folderId, existing.displayName)
 
@@ -354,6 +382,7 @@ export class VaultFileService {
         fileId: record.fileId,
         details: `web-copy:${existing.displayName}->${target.name}`
       })
+      getSearchCache().invalidateOnFileMutation(record.folderId)
 
       return toFileDto(record)
     } catch (error) {
@@ -411,8 +440,36 @@ export class VaultFileService {
       fileId: record.fileId,
       details: `web-rename:${existing.displayName}->${displayName}`
     })
+    getSearchCache().invalidateOnFileMutation(record.folderId)
 
     return toFileDto(record)
+  }
+
+  private async relocateBlob(
+    userId: string,
+    fileId: string,
+    storedBlobPath: string,
+    targetFolderId: string
+  ): Promise<string> {
+    const folderRel = await relativePathForFolderId(targetFolderId)
+    await ensureVaultFolderDirForId(targetFolderId)
+    const newKey = this.blobs.objectKey(userId, fileId, folderRel)
+    const newUri = this.blobs.toUri(newKey)
+    const oldKey = this.blobs.parseUri(storedBlobPath)
+    if (oldKey === newKey) return storedBlobPath
+
+    const dest = await this.blobs.prepareWrite(newKey)
+    if (oldKey) {
+      await this.blobs.copy(oldKey, newKey)
+    } else {
+      const fromPath = await resolveCiphertextPath(storedBlobPath, this.blobs)
+      await copyFile(fromPath, dest)
+    }
+    await protectCiphertextFile(dest)
+    if (oldKey) {
+      await this.blobs.remove(oldKey).catch(() => undefined)
+    }
+    return newUri
   }
 
   private async uniqueCopyName(folderId: string, baseName: string): Promise<string> {

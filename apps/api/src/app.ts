@@ -40,6 +40,11 @@ function rateLimitGroup(request: FastifyRequest): string {
   return 'default'
 }
 
+function envPositiveInt(name: string, fallback: number): number {
+  const raw = Number(process.env[name])
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback
+}
+
 function rateLimitMax(group: string): number {
   switch (group) {
     case 'auth':
@@ -49,7 +54,8 @@ function rateLimitMax(group: string): number {
     case 'download':
       return 120
     default:
-      return 600
+      // Override for search load tests (600/min will 429 a realistic run).
+      return envPositiveInt('API_RATE_LIMIT_DEFAULT', 600)
   }
 }
 

@@ -2,6 +2,7 @@ import type { FileCategoryDto, FolderDto, FolderRights } from '@securevault/doma
 import { DEFAULT_VAULT_FOLDER_TREE, EMPTY_RIGHTS, traverseAncestorIds } from '@securevault/domain'
 import { AccessControlService } from '../access/AccessControlService'
 import { DBService } from '@securevault/db'
+import { ensureVaultFolderDirForId, removeVaultFolderDirIfEmpty } from '../blobs/vaultDiskLayout'
 
 /**
  * Category catalog + shared sidebar folder trees.
@@ -118,6 +119,8 @@ export class FolderService {
     })
     this.acl.invalidateUser(userId)
 
+    await ensureVaultFolderDirForId(root.folderId).catch(() => undefined)
+
     return {
       categoryId: row.categoryId,
       code: row.code,
@@ -210,6 +213,7 @@ export class FolderService {
     })
 
     const rights = await this.acl.getEffectiveRights(folder.folderId, userId)
+    await ensureVaultFolderDirForId(folder.folderId).catch(() => undefined)
     return toFolderDto(folder, rights, false)
   }
 
@@ -244,6 +248,8 @@ export class FolderService {
       where: { folderId: folder.folderId },
       data: { isDeleted: true }
     })
+
+    await removeVaultFolderDirIfEmpty(folder.folderId).catch(() => undefined)
 
     return toFolderDto(record, EMPTY_RIGHTS, false)
   }
@@ -381,6 +387,7 @@ export class FolderService {
         orderBy: { createdAt: 'asc' }
       })
       if (!root) continue
+      await ensureVaultFolderDirForId(root.folderId).catch(() => undefined)
 
       const children = await this.db.prisma.folder.findMany({
         where: {
@@ -393,7 +400,7 @@ export class FolderService {
 
       for (const childName of dept.children) {
         if (existingNames.has(childName.toLowerCase())) continue
-        await this.db.prisma.folder.create({
+        const created = await this.db.prisma.folder.create({
           data: {
             userId: root.userId,
             categoryId: category.categoryId,
@@ -402,6 +409,7 @@ export class FolderService {
             isCategoryRoot: false
           }
         })
+        await ensureVaultFolderDirForId(created.folderId).catch(() => undefined)
       }
     }
   }

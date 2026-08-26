@@ -14,6 +14,7 @@ import {
 import type { AccessGrant } from '@securevault/domain'
 
 import { AuditAction, recordAudit } from '../audit/AuditService'
+import { getSearchCache } from '../files/searchCache'
 
 interface CacheEntry {
   rights: FolderRights
@@ -80,6 +81,7 @@ export class AccessControlService {
     for (const key of [...this.rightsCache.keys()]) {
       if (key.startsWith(prefix)) this.rightsCache.delete(key)
     }
+    getSearchCache().invalidateUser(userId)
   }
 
   invalidateFolder(_folderId: string): void {
@@ -89,6 +91,7 @@ export class AccessControlService {
   invalidateAll(): void {
     this.rightsCache.clear()
     this.identityCache.clear()
+    getSearchCache().invalidateAll()
   }
 
   async getRoleCodes(userId: string): Promise<string[]> {

@@ -28,6 +28,8 @@ interface FileNameModalProps {
   folder: FolderDto | null
   moduleName: string
   theme: ModuleTheme
+  /** Admin: skip retrieve and start a bulk ingest session in this folder. */
+  onManageFiles?: () => void
 }
 
 function sleep(ms: number): Promise<void> {
@@ -60,7 +62,8 @@ export function FileNameModal({
   onClose,
   folder,
   moduleName,
-  theme
+  theme,
+  onManageFiles
 }: FileNameModalProps): React.JSX.Element {
   const [phase, setPhase] = useState<Phase>('input')
   const [name, setName] = useState('')
@@ -204,10 +207,16 @@ export function FileNameModal({
               ) : null}
             </div>
 
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
-                Cancel
-              </Button>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              {onManageFiles ? (
+                <Button type="button" variant="outline" onClick={onManageFiles} disabled={submitting}>
+                  No fetch, upload
+                </Button>
+              ) : (
+                <Button type="button" variant="ghost" onClick={onClose} disabled={submitting}>
+                  Cancel
+                </Button>
+              )}
               <Button type="submit" disabled={!trimmed || submitting}>
                 {submitting ? (
                   <>
@@ -215,7 +224,7 @@ export function FileNameModal({
                     Verifying…
                   </>
                 ) : (
-                  'Retrieve'
+                  'Submit'
                 )}
               </Button>
             </div>
@@ -294,10 +303,16 @@ export function FileNameModal({
                 </p>
               </div>
             </div>
-            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="ghost" onClick={onClose}>
-                Close
-              </Button>
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+              {onManageFiles ? (
+                <Button type="button" variant="outline" onClick={onManageFiles}>
+                  No fetch, upload
+                </Button>
+              ) : (
+                <Button type="button" variant="ghost" onClick={onClose}>
+                  Close
+                </Button>
+              )}
               <Button type="button" onClick={retry}>
                 Try another name
               </Button>

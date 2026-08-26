@@ -49,3 +49,20 @@ export function blobObjectKey(userId: string, fileId: string): string {
   assertSafeObjectId(fileId, 'fileId')
   return `${userId}/${fileId}.enc`
 }
+
+/**
+ * Ciphertext lives under the mirrored vault folder, named only by file id.
+ * Original document names never appear on disk.
+ */
+export function folderBlobObjectKey(relativeFolderPath: string, fileId: string): string {
+  assertSafeObjectId(fileId, 'fileId')
+  const parts = relativeFolderPath
+    .replaceAll('\\', '/')
+    .split('/')
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (!parts.length || parts.some((p) => p === '..' || p.includes('\0'))) {
+    throw new Error('Invalid blob key.')
+  }
+  return `${parts.join('/')}/${fileId}.enc`
+}

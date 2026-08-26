@@ -172,10 +172,12 @@ export const api = {
       folderId?: string | null
     }): Promise<FileDto> => {
       const form = new FormData()
-      form.append('file', payload.file)
+      // Text fields must come before the file. Fastify only exposes fields parsed
+      // before the file stream starts, and folderId is required.
       form.append('displayName', payload.displayName)
-      form.append('categoryId', payload.categoryId)
       if (payload.folderId) form.append('folderId', payload.folderId)
+      if (payload.categoryId) form.append('categoryId', payload.categoryId)
+      form.append('file', payload.file)
       return json<FileDto>('/api/files', { method: 'POST', body: form })
     },
     listFiles: (filter: ListFilesFilter = {}) => {
@@ -277,6 +279,8 @@ export const api = {
     revokeFolderAcl: (folderAclId: string) =>
       json<FolderAclDto[]>(`/api/admin/acls/${folderAclId}`, { method: 'DELETE' }),
     getMyAccess: () => json<import('@securevault/domain').MyAccessEntryDto[]>('/api/admin/my-access'),
+    getStorage: () =>
+      json<{ blobRoot: string; layout: string; note: string }>('/api/admin/storage'),
     listAuditLogs: (filter: {
       userId?: string
       categoryId?: string
