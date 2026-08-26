@@ -560,6 +560,15 @@ export default function VaultBrowser(): React.JSX.Element {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [folders, selection])
 
+  const childCountById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const folder of folders) {
+      if (!folder.parentFolderId) continue
+      map.set(folder.parentFolderId, (map.get(folder.parentFolderId) ?? 0) + 1)
+    }
+    return map
+  }, [folders])
+
   // Module cards for the dashboard (root view): one per category root, with the
   // number of folders in that module and an accessibility flag.
   const moduleItems = useMemo<ModuleGridItem[]>(() => {
@@ -997,11 +1006,16 @@ export default function VaultBrowser(): React.JSX.Element {
 
   const isEmpty = !isSearching && visibleFolders.length === 0 && visibleFiles.length === 0
   const loading = filesQuery.isLoading || (isSearching && searchAllQuery.isLoading)
-  const isModuleRoot =
-    selection.type === 'folder' && Boolean(selectedFolder?.isCategoryRoot) && !isSearching
-  const moduleTheme = moduleThemeForCategory(selectedFolder?.name)
+  const moduleTheme = moduleThemeForCategory(
+    breadcrumbs[0]?.name ?? selectedFolder?.name
+  )
   const clipboardCount = clipboard?.items.length ?? 0
   const isDashboard = selection.type === 'root' && !isSearching
+  const isFolderGrid =
+    selection.type === 'folder' &&
+    !isSearching &&
+    (Boolean(selectedFolder?.isCategoryRoot) || childFolders.length > 0)
+  const isImmersive = isDashboard || isFolderGrid
   const cutFileIds = useMemo(
     () =>
       clipboard?.mode === 'cut' ? new Set(clipboard.items.map((i) => i.fileId)) : new Set<string>(),
@@ -1100,18 +1114,49 @@ export default function VaultBrowser(): React.JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden">
-      {isDashboard ? (
+      {isImmersive ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <PageTransition viewKey="dashboard">
-            <ModuleGrid
-              items={moduleItems}
-              loading={sidebarQuery.isLoading}
-              error={sidebarQuery.isError}
-              onRetry={() => void sidebarQuery.refetch()}
-              isAdmin={isAdmin}
-              onOpen={(folder) => openFolder(folder)}
-            />
-          </PageTransition>
+          {isDashboard ? (
+            <PageTransition viewKey="dashboard">
+              <ModuleGrid
+                items={moduleItems}
+                loading={sidebarQuery.isLoading}
+                error={sidebarQuery.isError}
+                onRetry={() => void sidebarQuery.refetch()}
+                isAdmin={isAdmin}
+                onOpen={(folder) => openFolder(folder)}
+              />
+            </PageTransition>
+          ) : (
+            <PageTransition viewKey={`module-${selectedFolderId ?? 'x'}`}>
+              <ModulePage
+                theme={moduleTheme}
+                folderName={selectedFolder?.name ?? 'Module'}
+                tagline={
+                  selectedFolder?.isCategoryRoot
+                    ? moduleTheme.tagline
+                    : `${breadcrumbs[0]?.name ?? 'Module'} · folder`
+                }
+                crumbs={[
+                  {
+                    label: 'My Vault',
+                    onSelect: () => navigateTo({ type: 'root' })
+                  },
+                  ...breadcrumbs.map((crumb, index) => ({
+                    label: crumb.name,
+                    onSelect:
+                      index === breadcrumbs.length - 1 ? undefined : () => openFolder(crumb)
+                  }))
+                ]}
+                subfolders={childFolders}
+                childCountById={childCountById}
+                loading={sidebarQuery.isLoading}
+                denied={Boolean(selectedFolder && !selectedFolder.rights.view && !selectedFolder.traverseOnly)}
+                onOpenFolder={openFolder}
+                onPickFile={(folder) => setFileNameFolder(folder)}
+              />
+            </PageTransition>
+          )}
         </div>
       ) : (
       <div className="relative flex min-h-0 flex-1">
@@ -1430,25 +1475,11 @@ export default function VaultBrowser(): React.JSX.Element {
             ) : null}
 
             {loading ? (
-              isModuleRoot ? (
-                <PageTransition viewKey="module">
-                  <ModulePage
-                    theme={moduleTheme}
-                    folderName={selectedFolder?.name ?? 'Module'}
-                    subfolders={[]}
-                    loading
-                    onOpenFolder={openFolder}
-                    onPickFile={(folder) => setFileNameFolder(folder)}
-                    onBackToDashboard={() => navigateTo({ type: 'root' })}
-                  />
-                </PageTransition>
-              ) : (
-                <ul className="space-y-1 p-2 pb-24 md:space-y-0 md:p-0 md:pb-8" aria-busy="true" aria-label="Loading files">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <FileRowSkeleton key={i} />
-                  ))}
-                </ul>
-              )
+              <ul className="space-y-1 p-2 pb-24 md:space-y-0 md:p-0 md:pb-8" aria-busy="true" aria-label="Loading files">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <FileRowSkeleton key={i} />
+                ))}
+              </ul>
             ) : (isSearching ? searchAllQuery.isError : filesQuery.isError) ? (
               <ErrorState
                 title={isSearching ? 'Search didn’t finish' : 'This folder didn’t load'}
@@ -1461,19 +1492,8 @@ export default function VaultBrowser(): React.JSX.Element {
                 }
               />
             ) : (
-              <PageTransition viewKey={isModuleRoot ? 'module' : 'folder'}>
-                {isModuleRoot ? (
-                  <ModulePage
-                    theme={moduleTheme}
-                    folderName={selectedFolder?.name ?? 'Module'}
-                    subfolders={visibleFolders}
-                    onOpenFolder={openFolder}
-                    onPickFile={(folder) => setFileNameFolder(folder)}
-                    onBackToDashboard={() => navigateTo({ type: 'root' })}
-                  />
-                ) : null}
-
-                {isEmpty && !isModuleRoot ? (
+              <PageTransition viewKey="folder">
+                {isEmpty ? (
                   <EmptyState
                     icon={FolderOpen}
                     title="This folder is empty"
@@ -1491,7 +1511,7 @@ export default function VaultBrowser(): React.JSX.Element {
                     title="No matches"
                     description={`Nothing in the vault is named like “${search.trim()}”.`}
                   />
-                ) : isModuleRoot && visibleFiles.length === 0 ? null : (
+                ) : (
               <div>
                 {/* Desktop column headers */}
                 <div className="sticky top-0 z-[1] hidden grid-cols-[minmax(180px,2fr)_150px_120px_80px_180px] gap-2 border-b border-sv-border bg-sv-surface/95 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-sv-text-muted backdrop-blur md:grid">
@@ -1503,8 +1523,7 @@ export default function VaultBrowser(): React.JSX.Element {
                 </div>
 
                 <ul className="space-y-1 p-2 pb-24 md:space-y-0 md:p-0 md:pb-8">
-                  {!isModuleRoot &&
-                    visibleFolders.map((folder) => {
+                  {visibleFolders.map((folder) => {
                     const dropHover = dropTargetFolderId === folder.folderId
                     const rowSelected = selectedFolderRowId === folder.folderId
                     const deletable = !folder.isCategoryRoot && folder.rights.delete
@@ -1871,7 +1890,7 @@ export default function VaultBrowser(): React.JSX.Element {
       <FileNameModal
         open={fileNameFolder !== null}
         folder={fileNameFolder}
-        moduleName={selectedFolder?.name ?? 'Module'}
+        moduleName={breadcrumbs[0]?.name ?? selectedFolder?.name ?? 'Module'}
         theme={moduleTheme}
         onClose={() => setFileNameFolder(null)}
       />

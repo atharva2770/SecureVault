@@ -34,11 +34,11 @@ export function SubfolderSkeleton({ className }: SkeletonProps): React.JSX.Eleme
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-3 shadow-card',
+        'flex items-center gap-4 rounded-2xl border border-sv-border bg-sv-surface p-5 shadow-card',
         className
       )}
     >
-      <Skeleton className="size-10 shrink-0 rounded-[calc(var(--sv-radius)-2px)]" />
+      <Skeleton className="size-12 shrink-0 rounded-xl" />
       <div className="min-w-0 flex-1">
         <Skeleton className="h-4 w-3/5" />
         <Skeleton className="mt-2 h-3 w-2/5" />
