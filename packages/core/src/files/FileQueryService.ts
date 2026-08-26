@@ -1,7 +1,9 @@
-import type { FileDto, ListFilesFilter } from '@securevault/domain'
+import type { FileDto, ListFilesFilter, VaultSearchResults } from '@securevault/domain'
 import { DBService } from '@securevault/db'
 
 import { AccessControlService } from '../access/AccessControlService'
+import { AuditAction, recordAudit } from '../audit/AuditService'
+import { FolderService } from '../folders/FolderService'
 
 /**
  * JSON file listing (no blob encrypt/decrypt) for the web API.
@@ -11,6 +13,7 @@ export class FileQueryService {
 
   private readonly db = DBService.getInstance()
   private readonly acl = AccessControlService.getInstance()
+  private readonly folders = FolderService.getInstance()
 
   private constructor() {}
 
@@ -73,6 +76,36 @@ export class FileQueryService {
       })
     }
     return result
+  }
+
+  async search(userId: string, term: string): Promise<VaultSearchResults> {
+    const q = term.trim().slice(0, 200).toLowerCase()
+    if (q.length < 2) {
+      return { modules: [], folders: [], files: [] }
+    }
+
+    recordAudit({
+      action: AuditAction.SEARCH,
+      userId,
+      details: q
+    })
+
+    const [folderRows, files] = await Promise.all([
+      this.folders.listFolders(userId),
+      this.listFiles(userId, {})
+    ])
+
+    const matchingFolders = folderRows.filter((f) => f.name.toLowerCase().includes(q))
+    return {
+      modules: matchingFolders.filter((f) => f.isCategoryRoot),
+      folders: matchingFolders.filter((f) => !f.isCategoryRoot),
+      files: files.filter(
+        (f) =>
+          f.displayName.toLowerCase().includes(q) ||
+          f.originalFileName.toLowerCase().includes(q) ||
+          (f.categoryName?.toLowerCase().includes(q) ?? false)
+      )
+    }
   }
 }
 

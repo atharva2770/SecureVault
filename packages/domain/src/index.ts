@@ -57,5 +57,8 @@ export type {
   AdminSetUserRolesPayload,
   AdminSetFolderAclPayload,
   UserFolderAccessDto,
-  MyAccessEntryDto
+  MyAccessEntryDto,
+  VaultSearchResults,
+  AuditLogDto,
+  AuditLogListDto
 } from './dto'

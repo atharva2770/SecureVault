@@ -9,6 +9,7 @@ import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod
 
 import { apiConfig } from './config'
 import { registerErrorHandler } from './httpErrors'
+import { registerAuditTrail } from './plugins/auditTrail'
 import { registerAuthGuard } from './plugins/auth'
 import { registerContentTypeGuard } from './plugins/contentType'
 import { registerCsrf } from './plugins/csrf'
@@ -63,6 +64,7 @@ export async function buildApi() {
   app.setSerializerCompiler(serializerCompiler)
   app.setSchemaErrorFormatter(() => new Error('Invalid request.'))
   registerErrorHandler(app)
+  await registerAuditTrail(app)
 
   await app.register(helmet, {
     // API responses are JSON; a tight CSP here is defense-in-depth (the SPA host

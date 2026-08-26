@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import {
   ChevronLeft,
   ChevronRight,
-  Grid3x3,
   Search,
   ShieldCheck,
   UserPlus,
@@ -25,6 +24,7 @@ import PageShell from '@/layout/PageShell'
 import { cn } from '@/lib/utils'
 import InviteUserModal from './InviteUserModal'
 import RightsMatrix from './RightsMatrix'
+import { AdminTabs } from './AdminTabs'
 
 type Tab = 'users' | 'rights'
 
@@ -45,12 +45,8 @@ export default function UsersPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const location = useLocation()
-  const navigate = useNavigate()
 
   const tab: Tab = location.pathname === '/admin/rights' ? 'rights' : 'users'
-  const setTab = (next: Tab): void => {
-    void navigate(next === 'rights' ? '/admin/rights' : '/admin/users')
-  }
 
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(0)
@@ -273,19 +269,7 @@ export default function UsersPage(): React.JSX.Element {
       title="Users & rights"
       subtitle="Manage people, roles, and which modules each person can open."
     >
-      {/* Tabs */}
-      <div role="tablist" aria-label="Admin sections" className="mb-5 flex items-center gap-1 overflow-x-auto border-b border-sv-border">
-        <TabButton active={tab === 'users'} onClick={() => setTab('users')} icon={<Users className="size-4" />}>
-          People
-        </TabButton>
-        <TabButton
-          active={tab === 'rights'}
-          onClick={() => setTab('rights')}
-          icon={<Grid3x3 className="size-4" />}
-        >
-          Rights matrix
-        </TabButton>
-      </div>
+      <AdminTabs />
 
       {tab === 'users' ? (
         <>
@@ -520,32 +504,3 @@ export default function UsersPage(): React.JSX.Element {
   )
 }
 
-function TabButton({
-  active,
-  onClick,
-  icon,
-  children
-}: {
-  active: boolean
-  onClick: () => void
-  icon: React.ReactNode
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        '-mb-px flex min-h-11 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition duration-fast ease-sv focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-offset-2 focus-visible:ring-offset-sv-bg motion-reduce:transition-none',
-        active
-          ? 'border-sv-accent text-sv-text'
-          : 'border-transparent text-sv-text-muted hover:text-sv-text'
-      )}
-    >
-      {icon}
-      {children}
-    </button>
-  )
-}

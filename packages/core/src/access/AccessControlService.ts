@@ -13,7 +13,7 @@ import {
 } from '@securevault/domain'
 import type { AccessGrant } from '@securevault/domain'
 
-import { AuditAction, AuditService } from '../audit/AuditService'
+import { AuditAction, recordAudit } from '../audit/AuditService'
 
 interface CacheEntry {
   rights: FolderRights
@@ -57,7 +57,6 @@ export class AccessControlService {
   private static instance: AccessControlService | null = null
 
   private readonly db = DBService.getInstance()
-  private readonly audit = AuditService.getInstance()
 
   private readonly rightsCache = new Map<string, CacheEntry>()
   private readonly identityCache = new Map<string, IdentityCacheEntry>()
@@ -114,9 +113,10 @@ export class AccessControlService {
   async require(folderId: string, right: FolderRight, userId: string): Promise<FolderRights> {
     const rights = await this.resolveEffectiveRights(userId, folderId)
     if (!rightToFlag(rights, right)) {
-      await this.audit.write({
-        action: AuditAction.ACL_DENY,
+      recordAudit({
+        action: AuditAction.AUTH_DENY,
         userId,
+        folderId,
         details: `deny:${right}:folder:${folderId}`
       })
       throw new Error('Access denied.')
@@ -142,10 +142,11 @@ export class AccessControlService {
       const fileRights = this.fileAccessLevelToRights(fileAcl.accessLevel)
       rights = intersectRights(rights, fileRights)
       if (!rightToFlag(rights, right)) {
-        await this.audit.write({
-          action: AuditAction.ACL_DENY,
+        recordAudit({
+          action: AuditAction.AUTH_DENY,
           userId,
           fileId,
+          folderId: file.folderId,
           details: `deny:${right}:file:${fileId}`
         })
         throw new Error('Access denied.')

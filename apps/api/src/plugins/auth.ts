@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { AccessControlService, AuditAction, AuditService } from '@securevault/core'
+import { AccessControlService, AuditAction, bindAuditUser, recordAudit } from '@securevault/core'
 
 import { apiConfig } from '../config'
 import { HttpError } from '../httpErrors'
@@ -23,7 +23,6 @@ declare module 'fastify' {
 }
 
 const acl = AccessControlService.getInstance()
-const audit = AuditService.getInstance()
 
 const PUBLIC_PATHS = new Set([
   '/health',
@@ -108,6 +107,7 @@ export async function registerAuthGuard(app: FastifyInstance): Promise<void> {
     const path = request.url.split('?')[0] ?? request.url
     const session = httpSessions.touch(readSessionId(request))
     request.vaultSession = session
+    bindAuditUser(session?.userId)
 
     if (PUBLIC_PATHS.has(path)) {
       return
@@ -129,8 +129,8 @@ export async function registerAuthGuard(app: FastifyInstance): Promise<void> {
     // the service layer also verifies). Non-admins never reach admin handlers.
     if (path.startsWith(ADMIN_PREFIX) && !request.identity?.isAdmin) {
       recordForbidden(session.userId, path)
-      await audit.write({
-        action: AuditAction.ACL_DENY,
+      recordAudit({
+        action: AuditAction.AUTH_DENY,
         userId: session.userId,
         details: `deny:admin-route:${path}`
       })
@@ -164,6 +164,11 @@ export function requireAdmin(request: FastifyRequest): RequestIdentity {
   const session = requireSession(request)
   if (!request.identity?.isAdmin) {
     recordForbidden(session.userId, request.url)
+    recordAudit({
+      action: AuditAction.AUTH_DENY,
+      userId: session.userId,
+      details: `deny:admin-route:${request.url.split('?')[0] ?? request.url}`
+    })
     throw new HttpError(403, 'Access denied. Admin privileges required.')
   }
   return request.identity

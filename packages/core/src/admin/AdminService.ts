@@ -13,7 +13,8 @@ import type {
 } from '@securevault/domain'
 import { PermissionCode, RoleCode } from '@securevault/domain'
 import { AccessControlService } from '../access/AccessControlService'
-import { AuditAction, AuditService } from '../audit/AuditService'
+import { AuditAction, AuditService, recordAudit } from '../audit/AuditService'
+import type { AuditLogListFilter, AuditLogListResult } from '../audit/AuditService'
 import { enforcePasswordPolicy } from '../auth/PasswordPolicy'
 import type { Argon2Params } from '../crypto/CryptoService'
 import { CryptoService } from '../crypto/CryptoService'
@@ -147,8 +148,8 @@ export class AdminService {
         }
       }
 
-      await this.audit.write({
-        action: AuditAction.ACL_GRANT,
+      recordAudit({
+        action: AuditAction.RIGHTS_CHANGE,
         userId: actorId,
         details: `createUser:${username}:role:${roleCode}`
       })
@@ -189,8 +190,8 @@ export class AdminService {
 
     await this.rbac.replaceRoles(targetId, payload.roleCodes, actorId)
 
-    await this.audit.write({
-      action: AuditAction.ACL_GRANT,
+    recordAudit({
+        action: AuditAction.RIGHTS_CHANGE,
       userId: actorId,
       details: `setRoles:${targetId}:${payload.roleCodes.join(',')}`
     })
@@ -215,8 +216,8 @@ export class AdminService {
 
     this.acl.invalidateUser(userId)
 
-    await this.audit.write({
-      action: AuditAction.ACL_GRANT,
+    recordAudit({
+        action: AuditAction.RIGHTS_CHANGE,
       userId: actorId,
       details: `${isDisabled ? 'disable' : 'enable'}:${userId}`
     })
@@ -373,11 +374,12 @@ export class AdminService {
     }
     this.acl.invalidateFolder(folderId)
 
-    await this.audit.write({
-      action: AuditAction.ACL_GRANT,
-      userId: actorId,
-      details: `folderAcl:${folderId}:${principalType}:${principalId}:V${canView ? 1 : 0}E${canEdit ? 1 : 0}C${canCopy ? 1 : 0}D${canDelete ? 1 : 0}`
-    })
+      recordAudit({
+        action: AuditAction.RIGHTS_CHANGE,
+        userId: actorId,
+        folderId,
+        details: `folderAcl:${folderId}:${principalType}:${principalId}:V${canView ? 1 : 0}E${canEdit ? 1 : 0}C${canCopy ? 1 : 0}D${canDelete ? 1 : 0}`
+      })
 
     return this.listFolderAcls(actorId, folderId)
   }
@@ -396,8 +398,8 @@ export class AdminService {
     }
     this.acl.invalidateFolder(row.folderId)
 
-    await this.audit.write({
-      action: AuditAction.ACL_GRANT,
+    recordAudit({
+        action: AuditAction.RIGHTS_CHANGE,
       userId: actorId,
       details: `revokeAcl:${folderAclId}`
     })
@@ -433,8 +435,8 @@ export class AdminService {
     if (!user) throw new Error('User not found.')
 
     const saved = await this.rbac.replaceUserFolderGrants(targetId, grants, actorId)
-    await this.audit.write({
-      action: AuditAction.ACL_GRANT,
+    recordAudit({
+        action: AuditAction.RIGHTS_CHANGE,
       userId: actorId,
       details: `setFolderAccess:${user.username}:${saved.length}`
     })
@@ -444,6 +446,11 @@ export class AdminService {
 
   async getMyAccess(actorUserId: string) {
     return this.acl.getMyAccess(actorUserId)
+  }
+
+  async listAuditLogs(actorUserId: string, filter: AuditLogListFilter): Promise<AuditLogListResult> {
+    await this.requireAdminOrManager(actorUserId, false)
+    return this.audit.list(filter)
   }
 
   private async getUserDto(userId: string): Promise<AdminUserDto> {

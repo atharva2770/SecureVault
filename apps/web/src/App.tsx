@@ -7,6 +7,7 @@ import { RequireAdmin, RequireAuth } from '@/auth/guards'
 import UnlockScreen from '@/components/UnlockScreen'
 import AppLayout from '@/layout/AppLayout'
 import UsersPage from '@/pages/admin/UsersPage'
+import AccessLogPage from '@/pages/admin/AccessLogPage'
 import ChangePasswordPage from '@/pages/ChangePasswordPage'
 import HelpPage from '@/pages/HelpPage'
 import MyAccessPage from '@/pages/MyAccessPage'
@@ -77,6 +78,14 @@ export default function App(): React.JSX.Element {
                     element={
                       <RequireAdmin>
                         <UsersPage />
+                      </RequireAdmin>
+                    }
+                  />
+                  <Route
+                    path="/admin/audit"
+                    element={
+                      <RequireAdmin>
+                        <AccessLogPage />
                       </RequireAdmin>
                     }
                   />

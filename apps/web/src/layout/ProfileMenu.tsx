@@ -6,6 +6,7 @@ import {
   LogOut,
   Monitor,
   Palette,
+  ScrollText,
   ShieldCheck,
   UserRound,
   Users
@@ -147,12 +148,20 @@ export default function ProfileMenu({ open, onClose }: ProfileMenuProps): React.
           </p>
           <div className="pb-1">
             {canManageUsers ? (
-              <MenuItem
-                to="/admin/users"
-                icon={<Users className="size-4" />}
-                label="People & folders"
-                onClick={onClose}
-              />
+              <>
+                <MenuItem
+                  to="/admin/users"
+                  icon={<Users className="size-4" />}
+                  label="People & folders"
+                  onClick={onClose}
+                />
+                <MenuItem
+                  to="/admin/audit"
+                  icon={<ScrollText className="size-4" />}
+                  label="Access log"
+                  onClick={onClose}
+                />
+              </>
             ) : null}
           </div>
         </>

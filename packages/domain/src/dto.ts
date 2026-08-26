@@ -246,3 +246,30 @@ export interface MyAccessEntryDto {
     delete: boolean
   }
 }
+
+export interface VaultSearchResults {
+  modules: FolderDto[]
+  folders: FolderDto[]
+  files: FileDto[]
+}
+
+export interface AuditLogDto {
+  logId: string
+  userId: string | null
+  username: string | null
+  action: string
+  fileId: string | null
+  fileName: string | null
+  folderId: string | null
+  categoryId: string | null
+  moduleName: string | null
+  details: string | null
+  ip: string | null
+  userAgent: string | null
+  timestamp: string
+}
+
+export interface AuditLogListDto {
+  items: AuditLogDto[]
+  nextCursor: string | null
+}

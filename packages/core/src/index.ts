@@ -13,8 +13,23 @@ export {
 } from './crypto/CryptoService'
 export type { Argon2Params, EncryptFileResult, WrappedKey } from './crypto/CryptoService'
 
-export { AuditService, AuditAction } from './audit/AuditService'
-export type { AuditActionName, WriteAuditInput } from './audit/AuditService'
+export {
+  AuditService,
+  AuditAction,
+  recordAudit,
+  bindAuditUser,
+  runWithAuditContext,
+  enterAuditContext,
+  auditAlreadyRecorded
+} from './audit/AuditService'
+export type {
+  AuditActionName,
+  WriteAuditInput,
+  AuditAlsStore,
+  AuditLogListFilter,
+  AuditLogListItem,
+  AuditLogListResult
+} from './audit/AuditService'
 
 export { AccessControlService } from './access/AccessControlService'
 export type { MyAccessEntry } from './access/AccessControlService'

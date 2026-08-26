@@ -36,6 +36,16 @@ export const setUserFolderAccessBodySchema = z.strictObject({
   folderIds: z.array(idSchema).max(500).optional()
 })
 
+export const listAuditLogsQuerySchema = z.strictObject({
+  userId: idSchema.optional(),
+  categoryId: idSchema.optional(),
+  action: z.string().trim().min(1).max(100).optional(),
+  from: z.string().trim().min(1).max(40).optional(),
+  to: z.string().trim().min(1).max(40).optional(),
+  cursor: z.string().regex(/^\d+$/).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional()
+})
+
 export const setFolderAclBodySchema = z.strictObject({
   principalType: z.enum(['USER', 'ROLE']).optional(),
   /** User UUID, or a role UUID / role code when principalType is ROLE. */

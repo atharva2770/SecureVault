@@ -8,6 +8,7 @@ import {
   createUserBodySchema,
   folderAclIdParamsSchema,
   folderIdParamsSchema,
+  listAuditLogsQuerySchema,
   setFolderAclBodySchema,
   setUserDisabledBodySchema,
   setUserFolderAccessBodySchema,
@@ -200,4 +201,35 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       return sendError(reply, error)
     }
   })
+
+  // Append-only: no PATCH/DELETE for audit rows. Retention is a DBA script.
+  r.get(
+    '/api/admin/audit-logs',
+    { schema: { querystring: listAuditLogsQuerySchema } },
+    async (request, reply) => {
+      try {
+        const from = parseOptionalDate(request.query.from)
+        const to = parseOptionalDate(request.query.to)
+        if (request.query.from && !from) return reply.status(400).send({ error: 'Invalid request.' })
+        if (request.query.to && !to) return reply.status(400).send({ error: 'Invalid request.' })
+        return await admin.listAuditLogs(requireSession(request).userId, {
+          userId: request.query.userId,
+          categoryId: request.query.categoryId,
+          action: request.query.action,
+          from,
+          to,
+          cursor: request.query.cursor,
+          limit: request.query.limit
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
+    }
+  )
+}
+
+function parseOptionalDate(value: string | undefined): Date | undefined {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? undefined : date
 }

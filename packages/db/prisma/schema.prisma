@@ -199,18 +199,28 @@ model FolderAcl {
   @@map("FolderAcls")
 }
 
+/// Append-only access trail. Application code must only INSERT.
+/// UPDATE/DELETE are blocked by TR_AuditLogs_Immutable (see packages/db/sql).
 model AuditLog {
-  logId       BigInt   @id @default(autoincrement()) @map("LogId")
-  userId      String?  @map("UserId") @db.UniqueIdentifier
-  fileId      String?  @map("FileId") @db.UniqueIdentifier
-  action      String   @map("Action") @db.NVarChar(100)
-  details     String?  @map("Details") @db.NVarChar(Max)
-  ipOrDevice  String?  @map("IPOrDevice") @db.NVarChar(200)
-  timestamp   DateTime @default(now()) @map("Timestamp") @db.DateTime2
+  logId      BigInt   @id @default(autoincrement()) @map("LogId")
+  userId     String?  @map("UserId") @db.UniqueIdentifier
+  fileId     String?  @map("FileId") @db.UniqueIdentifier
+  folderId   String?  @map("FolderId") @db.UniqueIdentifier
+  categoryId String?  @map("CategoryId") @db.UniqueIdentifier
+  action     String   @map("Action") @db.NVarChar(100)
+  details    String?  @map("Details") @db.NVarChar(Max)
+  /// Legacy combined field — prefer ip + userAgent.
+  ipOrDevice String?  @map("IPOrDevice") @db.NVarChar(200)
+  ip         String?  @map("Ip") @db.NVarChar(64)
+  userAgent  String?  @map("UserAgent") @db.NVarChar(300)
+  timestamp  DateTime @default(now()) @map("Timestamp") @db.DateTime2
 
   file File? @relation(fields: [fileId], references: [fileId], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([timestamp, userId])
+  @@index([userId, timestamp])
+  @@index([categoryId, timestamp])
+  @@index([action, timestamp])
   @@index([fileId])
   @@map("AuditLogs")
 }

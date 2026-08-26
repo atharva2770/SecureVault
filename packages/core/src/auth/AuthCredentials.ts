@@ -2,7 +2,7 @@ import type { AuthUserDto } from '@securevault/domain'
 import { DBService } from '@securevault/db'
 import { RoleCode } from '@securevault/domain'
 
-import { AuditAction, AuditService } from '../audit/AuditService'
+import { AuditAction, recordAudit } from '../audit/AuditService'
 import type { Argon2Params } from '../crypto/CryptoService'
 import { CryptoService } from '../crypto/CryptoService'
 import { enforcePasswordPolicy } from './PasswordPolicy'
@@ -41,7 +41,6 @@ export class AuthCredentials {
 
   private readonly db = DBService.getInstance()
   private readonly crypto = CryptoService.getInstance()
-  private readonly audit = AuditService.getInstance()
   private readonly rbac = RbacService.getInstance()
 
   private constructor() {}
@@ -106,7 +105,7 @@ export class AuthCredentials {
 
       const roles = await this.rbac.getUserRoleCodes(user.userId)
 
-      await this.audit.write({
+      recordAudit({
         action: AuditAction.UNLOCK,
         userId: user.userId,
         details: 'register',
@@ -164,12 +163,12 @@ export class AuthCredentials {
         roles = await this.rbac.getUserRoleCodes(user.userId)
       }
 
-      await this.audit.write({
+      recordAudit({
         action: AuditAction.LOGIN,
         userId: user.userId,
         ipOrDevice: meta?.ipOrDevice
       })
-      await this.audit.write({
+      recordAudit({
         action: AuditAction.UNLOCK,
         userId: user.userId,
         ipOrDevice: meta?.ipOrDevice
@@ -238,7 +237,7 @@ export class AuthCredentials {
 
       const roles = await this.rbac.getUserRoleCodes(user.userId)
 
-      await this.audit.write({
+      recordAudit({
         action: AuditAction.PASSWORD_CHANGE,
         userId
       })

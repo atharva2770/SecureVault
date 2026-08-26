@@ -22,7 +22,9 @@ import type {
   RegisterPayload,
   RenameFilePayload,
   RoleDto,
-  UserFolderAccessDto
+  UserFolderAccessDto,
+  VaultSearchResults,
+  AuditLogListDto
 } from '@securevault/domain'
 
 export class SessionLockedError extends Error {
@@ -273,8 +275,29 @@ export const api = {
       }),
     revokeFolderAcl: (folderAclId: string) =>
       json<FolderAclDto[]>(`/api/admin/acls/${folderAclId}`, { method: 'DELETE' }),
-    getMyAccess: () => json<import('@securevault/domain').MyAccessEntryDto[]>('/api/admin/my-access')
+    getMyAccess: () => json<import('@securevault/domain').MyAccessEntryDto[]>('/api/admin/my-access'),
+    listAuditLogs: (filter: {
+      userId?: string
+      categoryId?: string
+      action?: string
+      from?: string
+      to?: string
+      cursor?: string
+      limit?: number
+    } = {}) => {
+      const params = new URLSearchParams()
+      if (filter.userId) params.set('userId', filter.userId)
+      if (filter.categoryId) params.set('categoryId', filter.categoryId)
+      if (filter.action) params.set('action', filter.action)
+      if (filter.from) params.set('from', filter.from)
+      if (filter.to) params.set('to', filter.to)
+      if (filter.cursor) params.set('cursor', filter.cursor)
+      if (filter.limit) params.set('limit', String(filter.limit))
+      const qs = params.toString()
+      return json<AuditLogListDto>(`/api/admin/audit-logs${qs ? `?${qs}` : ''}`)
+    }
   },
+  search: (q: string) => json<VaultSearchResults>(`/api/search?${new URLSearchParams({ q })}`),
   ensureSidebar: () =>
     json<{ categories: FileCategoryDto[]; folders: FolderDto[] }>('/api/sidebar/ensure', {
       method: 'POST'

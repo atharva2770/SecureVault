@@ -9,7 +9,7 @@ import type { CopyFilePayload, FileDto, MoveFilePayload, RenameFilePayload } fro
 import { DBService } from '@securevault/db'
 
 import { AccessControlService } from '../access/AccessControlService'
-import { AuditAction, AuditService } from '../audit/AuditService'
+import { AuditAction, recordAudit } from '../audit/AuditService'
 import type { BlobStore } from '../blobs/BlobStore'
 import { isWebBlobUri, WEB_FILE_SOURCE } from '../blobs/blobUri'
 import { resolveCiphertextPath } from '../blobs/vaultPaths'
@@ -45,7 +45,6 @@ export interface VaultDownloadResult {
 export class VaultFileService {
   private readonly db = DBService.getInstance()
   private readonly crypto = CryptoService.getInstance()
-  private readonly audit = AuditService.getInstance()
   private readonly folders = FolderService.getInstance()
   private readonly acl = AccessControlService.getInstance()
 
@@ -126,10 +125,12 @@ export class VaultFileService {
         include: { category: true }
       })
 
-      await this.audit.write({
+      recordAudit({
         action: AuditAction.FILE_ADD,
         userId,
         fileId: record.fileId,
+        folderId: record.folderId,
+        categoryId: record.categoryId,
         details: `web:${displayName} [${category.name}]`
       })
 
@@ -184,10 +185,12 @@ export class VaultFileService {
 
       await this.promoteToSharedStore(record, encPath, dek).catch(() => undefined)
 
-      await this.audit.write({
-        action: AuditAction.FILE_OPEN,
+      recordAudit({
+        action: options?.intent === 'copy' ? AuditAction.DOWNLOAD : AuditAction.RETRIEVE,
         userId,
         fileId: record.fileId,
+        folderId: record.folderId,
+        categoryId: record.categoryId,
         details: `web-download:${record.displayName}`
       })
 
@@ -221,10 +224,12 @@ export class VaultFileService {
       include: { category: true }
     })
 
-    await this.audit.write({
+    recordAudit({
       action: AuditAction.FILE_DELETE,
       userId,
       fileId: record.fileId,
+      folderId: record.folderId,
+      categoryId: record.categoryId,
       details: `web:${record.displayName}`
     })
 
@@ -270,7 +275,7 @@ export class VaultFileService {
       include: { category: true }
     })
 
-    await this.audit.write({
+    recordAudit({
       action: AuditAction.FILE_OPEN,
       userId,
       fileId: record.fileId,
@@ -339,7 +344,7 @@ export class VaultFileService {
         include: { category: true }
       })
 
-      await this.audit.write({
+      recordAudit({
         action: AuditAction.FILE_ADD,
         userId,
         fileId: record.fileId,
@@ -396,7 +401,7 @@ export class VaultFileService {
       include: { category: true }
     })
 
-    await this.audit.write({
+    recordAudit({
       action: AuditAction.FILE_OPEN,
       userId,
       fileId: record.fileId,

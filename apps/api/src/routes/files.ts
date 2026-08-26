@@ -17,6 +17,7 @@ import {
   listFilesQuerySchema,
   moveOrCopyBodySchema,
   renameFileBodySchema,
+  searchQuerySchema,
   uploadFieldsSchema
 } from '../schemas/files'
 
@@ -97,6 +98,15 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         folderId: request.query.folderId,
         categoryId: request.query.categoryId
       })
+    } catch (error) {
+      return sendError(reply, error)
+    }
+  })
+
+  r.get('/api/search', { schema: { querystring: searchQuerySchema } }, async (request, reply) => {
+    try {
+      const session = requireSession(request)
+      return await listed.search(session.userId, request.query.q)
     } catch (error) {
       return sendError(reply, error)
     }
