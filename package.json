@@ -16,6 +16,8 @@
     "build": "npm run build -w @securevault/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "audit:deps": "npm audit --omit=dev --audit-level=high",
+    "audit:deps:all": "npm audit --audit-level=high",
     "format": "prettier --write .",
     "db:generate": "npm run generate -w @securevault/db",
     "db:migrate": "npm run migrate:dev -w @securevault/db",

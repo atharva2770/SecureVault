@@ -36,4 +36,16 @@ describe('toPublicError', () => {
     const mapped = toPublicError(new HttpError(500, 'ENOENT: no such file C:\\secrets'))
     expect(mapped.clientMessage).toBe('Something went wrong.')
   })
+
+  it('does not echo a non-allowlisted 400 that contains a path', () => {
+    const mapped = toPublicError(new HttpError(400, 'Failed at C:\\vault\\blobs\\file.enc'))
+    expect(mapped.clientMessage).toBe('Invalid request.')
+    expect(mapped.clientMessage).not.toMatch(/C:\\/)
+  })
+
+  it('maps oversized uploads to a generic 413', () => {
+    const mapped = toPublicError(new Error('Request too large.'))
+    expect(mapped.statusCode).toBe(413)
+    expect(mapped.clientMessage).toBe('Request too large.')
+  })
 })

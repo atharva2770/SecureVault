@@ -1,0 +1,29 @@
+name: ci
+
+# Runtime dependency audit + unit tests. Copy this workflow when the repo is on GitHub.
+# Locally: npm run audit:deps && npm test && npm run typecheck
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  security-and-test:
+    runs-on: ubuntu-latest
+    env:
+      API_COOKIE_SECRET: ci-cookie-secret-do-not-use-in-prod
+      VAULT_KMS_WRAP_KEY: 11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa
+      DATABASE_URL: sqlserver://localhost:1433;database=SecureVault;user=sa;password=ci-only;trustServerCertificate=true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Dependency vulnerability audit
+        run: npm run audit:deps:all
+        continue-on-error: true
+      - run: npm test
+      - run: npm run typecheck

@@ -18,7 +18,8 @@ import { unwrapFileDek } from '../crypto/unwrapFileDek'
 import { FolderService } from '../folders/FolderService'
 import type { KeyWrappingProvider } from '../kms/KeyWrappingProvider'
 import { secureZero } from '../utils/secure'
-import { guessMime, safeFileName, toFileDto } from './fileDto'
+import { toFileDto, safeFileName } from './fileDto'
+import { inspectUpload, limitReadable } from './sniffUpload'
 
 export interface VaultUploadInput {
   userId: string
@@ -28,6 +29,7 @@ export interface VaultUploadInput {
   originalFileName: string
   mimeType?: string | null
   body: Readable
+  maxBytes?: number
 }
 
 export interface VaultDownloadResult {
@@ -85,7 +87,9 @@ export class VaultFileService {
     }
 
     const fileId = randomUUID()
-    const mimeType = input.mimeType?.trim() || guessMime(originalFileName)
+    const sniffed = await inspectUpload(input.body, originalFileName)
+    const body = limitReadable(sniffed.body, input.maxBytes ?? 100 * 1024 * 1024)
+    const mimeType = sniffed.mimeType
     const accessPasswordHash = await this.crypto.hashAccessPassword(displayName)
     const key = this.blobs.objectKey(userId, fileId)
     const destPath = await this.blobs.prepareWrite(key)
@@ -96,7 +100,7 @@ export class VaultFileService {
 
     try {
       dek = this.crypto.generateDEK()
-      const encrypted = await this.crypto.encryptReadable(input.body, dek, destPath)
+      const encrypted = await this.crypto.encryptReadable(body, dek, destPath)
       blobWritten = true
 
       const wrappedDEK = Buffer.from(await this.kms.wrapDek(dek))

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import { blobObjectKey } from './blobUri'
 import type { BlobStore } from './BlobStore'
-import { resolveCiphertextPath } from './vaultPaths'
+import { resolveCiphertextPath, resolveVaultBlobRoot } from './vaultPaths'
 
 function stubStore(readPath: string): BlobStore {
   return {
@@ -46,5 +46,17 @@ describe('resolveCiphertextPath', () => {
     await expect(resolveCiphertextPath('svblob:local/x/y.enc', store, root)).rejects.toThrow(
       'Invalid blob path.'
     )
+  })
+})
+
+describe('resolveVaultBlobRoot', () => {
+  it('refuses a blob root under the web app', () => {
+    expect(() => resolveVaultBlobRoot('apps/web/public/uploads')).toThrow(
+      'VAULT_BLOB_ROOT must not be inside the web app directory.'
+    )
+  })
+
+  it('allows the default data/vault-blobs location', () => {
+    expect(resolveVaultBlobRoot('data/vault-blobs')).toMatch(/vault-blobs/)
   })
 })

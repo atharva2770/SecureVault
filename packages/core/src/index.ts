@@ -40,6 +40,13 @@ export { AdminService } from './admin/AdminService'
 export { FileQueryService } from './files/FileQueryService'
 export { VaultFileService } from './files/VaultFileService'
 export { toFileDto, guessMime, safeFileName } from './files/fileDto'
+export {
+  sniffUploadMime,
+  inspectUpload,
+  limitReadable,
+  UnsupportedUploadTypeError,
+  UploadTooLargeError
+} from './files/sniffUpload'
 export { AuthCredentials } from './auth/AuthCredentials'
 export type { AuthCredentialResult, VerifiedUser, AuthAuditMeta } from './auth/AuthCredentials'
 export {

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { access } from 'node:fs/promises'
-import { isAbsolute, resolve } from 'node:path'
+import { isAbsolute, relative, resolve } from 'node:path'
 
 import { assertPathInsideRoot } from '../utils/pathContainment'
 import type { BlobStore } from './BlobStore'
@@ -19,10 +19,29 @@ function workspaceRoot(): string {
   return process.cwd()
 }
 
-/** Ciphertext root for the web vault. */
-export function resolveVaultBlobRoot(): string {
-  const raw = process.env.VAULT_BLOB_ROOT?.trim() || 'data/vault-blobs'
-  return isAbsolute(raw) ? raw : resolve(workspaceRoot(), raw)
+/** Ciphertext root for the web vault. Must not sit under a directory Vite/the SPA can serve. */
+export function resolveVaultBlobRoot(rawOverride?: string): string {
+  const raw = (rawOverride ?? process.env.VAULT_BLOB_ROOT)?.trim() || 'data/vault-blobs'
+  const resolved = isAbsolute(raw) ? raw : resolve(workspaceRoot(), raw)
+  return assertBlobRootNotWebServed(resolved)
+}
+
+function assertBlobRootNotWebServed(root: string): string {
+  const workspace = workspaceRoot()
+  const forbidden = [
+    resolve(workspace, 'apps/web'),
+    resolve(workspace, 'apps/web/public'),
+    resolve(workspace, 'apps/web/dist'),
+    resolve(workspace, 'apps/web/out')
+  ]
+  for (const dir of forbidden) {
+    const rel = relative(dir, root)
+    const escapes = rel.split(/[/\\]/)[0] === '..' || isAbsolute(rel)
+    if (!escapes) {
+      throw new Error('VAULT_BLOB_ROOT must not be inside the web app directory.')
+    }
+  }
+  return root
 }
 
 /**

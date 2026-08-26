@@ -1,16 +1,19 @@
 import { loadWorkspaceEnv } from '@securevault/db'
 
 import { buildApi } from './app'
-import { apiConfig } from './config'
+import { apiConfig, ConfigError } from './config'
 
 loadWorkspaceEnv()
 
-const app = await buildApi()
-
 try {
+  const app = await buildApi()
   await app.listen({ port: apiConfig.port, host: apiConfig.host })
   app.log.info(`SecureVault API listening on http://${apiConfig.host}:${apiConfig.port}`)
 } catch (error) {
-  app.log.error(error)
+  if (error instanceof ConfigError) {
+    console.error(error.message)
+    process.exit(1)
+  }
+  console.error(error)
   process.exit(1)
 }

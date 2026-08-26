@@ -51,6 +51,9 @@ const PUBLIC_MESSAGES = new Set([
   'Category folder not found.',
   'Folder not found for this file type.',
   'Invalid file type.',
+  'File type is not allowed.',
+  'Empty files cannot be uploaded.',
+  'Request too large.',
   'Destination folder not found in this category.',
   'A file with that name already exists in this folder.',
   'Target folder is required.',
@@ -83,7 +86,8 @@ function statusFromMessage(message: string): number {
   if (lower === 'access denied.' || lower.includes('admin privileges') || lower.includes('only admins')) {
     return 403
   }
-  if (lower.includes('too many') || lower.includes('file size')) return 429
+  if (lower.includes('too many')) return 429
+  if (lower.includes('request too large') || lower.includes('payload too large')) return 413
   if (lower.includes('not found')) return 404
   if (lower.includes('incorrect file password')) return 403
   if (
@@ -100,7 +104,9 @@ function statusFromMessage(message: string): number {
     lower.includes('too simple') ||
     lower.includes('too common') ||
     lower.includes('data breach') ||
-    lower.includes('passphrase')
+    lower.includes('passphrase') ||
+    lower.includes('not allowed') ||
+    lower.includes('empty files')
   ) {
     return 400
   }
@@ -119,7 +125,7 @@ export function toPublicError(error: unknown): PublicError {
     const clientMessage =
       error.statusCode >= 500 || looksInternal(detail)
         ? (PUBLIC_BY_STATUS[error.statusCode] ?? PUBLIC_BY_STATUS[500])
-        : PUBLIC_MESSAGES.has(detail) || error.statusCode < 500
+        : PUBLIC_MESSAGES.has(detail)
           ? detail
           : (PUBLIC_BY_STATUS[error.statusCode] ?? PUBLIC_BY_STATUS[400])
     return { statusCode: error.statusCode, clientMessage, detail }
@@ -142,15 +148,7 @@ export function toPublicError(error: unknown): PublicError {
 
   const clientMessage = PUBLIC_MESSAGES.has(detail)
     ? detail
-    : error instanceof PasswordPolicyError
-      ? detail
-      : statusCode === 400 &&
-          (detail.startsWith('Password ') ||
-            detail.includes('password') ||
-            detail.startsWith('Username ') ||
-            detail.startsWith('Use at least'))
-        ? detail
-        : (PUBLIC_BY_STATUS[statusCode] ?? PUBLIC_BY_STATUS[400])
+    : (PUBLIC_BY_STATUS[statusCode] ?? PUBLIC_BY_STATUS[400])
 
   return { statusCode, clientMessage, detail }
 }
@@ -198,10 +196,11 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
 
     const mapped = toPublicError(error)
-    const status = anyErr.statusCode && anyErr.statusCode >= 400 ? anyErr.statusCode : mapped.statusCode
     request.log.error({ err: error, detail: mapped.detail, reqId: request.id }, 'unhandled request error')
-    return reply.status(status >= 400 ? status : 500).send({
-      error: status >= 500 ? PUBLIC_BY_STATUS[500] : mapped.clientMessage
+    const status = anyErr.statusCode && anyErr.statusCode >= 400 ? anyErr.statusCode : mapped.statusCode
+    const safeStatus = status >= 400 ? status : 500
+    return reply.status(safeStatus).send({
+      error: safeStatus >= 500 ? PUBLIC_BY_STATUS[500] : mapped.clientMessage
     })
   })
 }

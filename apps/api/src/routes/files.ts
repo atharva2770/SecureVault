@@ -142,7 +142,8 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         folderId: parsed.data.folderId ?? null,
         originalFileName: uploaded.filename || 'upload.bin',
         mimeType: uploaded.mimetype || null,
-        body: uploaded.file
+        body: uploaded.file,
+        maxBytes: apiConfig.maxUploadBytes
       })
 
       return reply.status(201).send(record)
