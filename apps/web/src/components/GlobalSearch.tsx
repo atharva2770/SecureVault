@@ -1,10 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { File as FileIcon, Folder, Layers, Search, X } from 'lucide-react'
 
+import { HighlightMatch } from '@/components/HighlightMatch'
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
-import { MAX_SEARCH_QUERY_LENGTH, searchVault, totalResults } from '@/lib/search'
+import { mergeAbortSignals } from '@/lib/abortSignal'
+import {
+  GLOBAL_SEARCH_DEBOUNCE_MS,
+  GLOBAL_SEARCH_STALE_MS,
+  MAX_SEARCH_QUERY_LENGTH,
+  searchVault,
+  totalResults
+} from '@/lib/search'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -16,39 +24,54 @@ const PER_SECTION = 5
 export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): React.JSX.Element {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const rootRef = useRef<HTMLDivElement>(null)
+  const keystrokeAbort = useRef(new AbortController())
 
-  const [text, setText] = useState(params.get('q') ?? '')
-  const [term, setTerm] = useState(text.trim())
+  const urlQ = params.get('q') ?? ''
+  const [text, setText] = useState(urlQ)
+  const [term, setTerm] = useState(urlQ.trim())
   const [open, setOpen] = useState(false)
 
-  // Debounced: push the query into the URL (drives the in-page results) and the
-  // dropdown query term together.
   const commit = useDebouncedCallback((value: string) => {
     const next = new URLSearchParams(params)
     if (value) next.set('q', value)
     else next.delete('q')
     setParams(next, { replace: true })
     setTerm(value.trim())
-  }, 250)
+  }, GLOBAL_SEARCH_DEBOUNCE_MS)
+
+  useEffect(() => {
+    if (commit.pending()) return
+    setText(urlQ)
+    setTerm(urlQ.trim())
+  }, [urlQ, commit])
+
+  function cancelInflight(): void {
+    keystrokeAbort.current.abort()
+    keystrokeAbort.current = new AbortController()
+    void queryClient.cancelQueries({ queryKey: ['search', 'global'] })
+  }
 
   function onChange(value: string): void {
     const next = value.slice(0, MAX_SEARCH_QUERY_LENGTH)
+    cancelInflight()
     setText(next)
     setOpen(next.trim().length >= MIN_CHARS)
     commit(next)
   }
 
   function clear(): void {
+    cancelInflight()
     setText('')
     setTerm('')
     setOpen(false)
+    commit.cancel()
     const next = new URLSearchParams(params)
     next.delete('q')
     setParams(next, { replace: true })
   }
 
-  // Close on outside click.
   useEffect(() => {
     function onDown(e: MouseEvent): void {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
@@ -58,17 +81,23 @@ export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): Re
   }, [])
 
   const query = useQuery({
-    queryKey: ['global-search', term],
-    queryFn: () => searchVault(term),
+    queryKey: ['search', 'global', term],
+    queryFn: ({ signal }) =>
+      searchVault(term, mergeAbortSignals(signal, keystrokeAbort.current.signal)),
     enabled: term.length >= MIN_CHARS,
-    staleTime: 10_000
+    staleTime: GLOBAL_SEARCH_STALE_MS,
+    gcTime: 5 * 60_000
   })
 
   const results = query.data
   const showDropdown = open && text.trim().length >= MIN_CHARS
-  const isEmpty = query.isSuccess && totalResults(results) === 0
+  const awaitingDebounce = text.trim() !== term
+  const showSkeleton = awaitingDebounce || query.isPending
+  const isEmpty = !showSkeleton && query.isSuccess && totalResults(results) === 0
 
   function choose(value: string): void {
+    cancelInflight()
+    commit.cancel()
     setText(value)
     setTerm(value.trim())
     setOpen(false)
@@ -112,7 +141,7 @@ export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): Re
           role="listbox"
           className="absolute top-[calc(100%+0.5rem)] left-0 z-50 max-h-[70vh] w-full overflow-y-auto rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface shadow-modal"
         >
-          {query.isLoading ? (
+          {showSkeleton ? (
             <div aria-busy="true" aria-label="Searching" className="py-1.5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <SearchRowSkeleton key={i} />
@@ -136,12 +165,22 @@ export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): Re
             <div className="py-1.5">
               <ResultSection title="Modules" icon={Layers}>
                 {results.modules.slice(0, PER_SECTION).map((m) => (
-                  <ResultRow key={m.folderId} label={m.name} onSelect={() => choose(m.name)} />
+                  <ResultRow
+                    key={m.folderId}
+                    label={m.name}
+                    query={term}
+                    onSelect={() => choose(m.name)}
+                  />
                 ))}
               </ResultSection>
               <ResultSection title="Folders" icon={Folder}>
                 {results.folders.slice(0, PER_SECTION).map((f) => (
-                  <ResultRow key={f.folderId} label={f.name} onSelect={() => choose(f.name)} />
+                  <ResultRow
+                    key={f.folderId}
+                    label={f.name}
+                    query={term}
+                    onSelect={() => choose(f.name)}
+                  />
                 ))}
               </ResultSection>
               <ResultSection title="Files" icon={FileIcon}>
@@ -149,6 +188,7 @@ export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): Re
                   <ResultRow
                     key={file.fileId}
                     label={file.displayName}
+                    query={term}
                     hint={file.categoryName ?? undefined}
                     mono
                     onSelect={() => choose(file.displayName)}
@@ -188,11 +228,13 @@ function ResultSection({
 function ResultRow({
   label,
   hint,
+  query,
   mono,
   onSelect
 }: {
   label: string
   hint?: string
+  query: string
   mono?: boolean
   onSelect: () => void
 }): React.JSX.Element {
@@ -205,7 +247,7 @@ function ResultRow({
       className="flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2.5 text-left outline-none transition hover:bg-sv-surface-2 focus-visible:ring-2 focus-visible:ring-sv-accent focus-visible:ring-inset motion-reduce:transition-none max-sm:min-h-11"
     >
       <span className={cn('min-w-0 flex-1 truncate text-sm text-sv-text', mono && 'font-mono')}>
-        {label}
+        <HighlightMatch text={label} query={query} />
       </span>
       {hint ? <span className="shrink-0 text-xs text-sv-text-faint">{hint}</span> : null}
     </button>
