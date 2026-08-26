@@ -132,9 +132,17 @@
   --shadow-card: var(--sv-shadow-card);
   --shadow-modal: var(--sv-shadow-modal);
 
-  /* Typography */
-  --font-sans: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  /* Brand / module (Docman landing language) */
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-elevated);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-mod: var(--mod);
+
+  /* Typography — Sora display + Manrope body (Docman), Outfit as fallback */
+  --font-sans: 'Manrope', 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Sora', 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui, sans-serif;
   --font-mono:
     'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'SF Mono', Menlo, Consolas,
     'Liberation Mono', monospace;
@@ -160,11 +168,11 @@
 :root,
 [data-theme='dark'] {
   color-scheme: dark;
-  --radius: 0.75rem;
+  --radius: 0.9rem;
   --sv-titlebar-height: 56px;
   --sv-header-height: 56px;
   --sv-sidebar-width: min(280px, 86vw);
-  --sv-radius: 12px;
+  --sv-radius: 14px;
 
   /* Layout spacing scale (4px base). Utilities (p-4, gap-6, …) derive from
      --spacing; these are semantic layout rhythm tokens used via var(). */
@@ -178,23 +186,35 @@
   --sv-duration-fast: 180ms;
   --sv-duration-med: 300ms;
 
-  --bg-base: #0f1115;
-  --bg-surface: #171a21;
-  --bg-elevated: #1f232c;
-  --border: #2a2e37;
-  --border-2: #363c48;
-  --text-primary: #f3f4f6;
-  --text-secondary: #9aa1ae;
-  --text-faint: #828a99;
-  --accent-primary: #4f46e5; /* fill — white text 6.3:1 */
-  --accent-ink: #818cf8; /* text/icons on dark surfaces 5.8:1 */
-  --accent-2: #7c3aed; /* violet — gradient partner, still ≥4.5:1 with white */
-  --accent-success: #22c55e;
-  --accent-warning: #f59e0b;
-  --accent-danger: #dc2626; /* fill — white text ≥4.5:1 */
-  --danger-ink: #f87171; /* text/icons on dark surfaces 6.3:1 */
-  --success-ink: #4ade80;
-  --warning-ink: #fbbf24;
+  --bg-base: oklch(0.16 0.035 268);
+  --bg-surface: oklch(0.21 0.038 268);
+  --bg-elevated: oklch(0.26 0.042 268);
+  --border: oklch(0.99 0 0 / 10%);
+  --border-2: oklch(0.99 0 0 / 16%);
+  --text-primary: oklch(0.97 0.008 268);
+  --text-secondary: oklch(0.72 0.028 268);
+  --text-faint: oklch(0.64 0.024 268);
+  --accent-primary: oklch(0.66 0.21 285); /* fill — white text on purple */
+  --accent-ink: oklch(0.78 0.16 285); /* text/icons on dark surfaces */
+  --accent-2: oklch(0.68 0.17 215); /* cyan — gradient partner */
+  --accent-success: oklch(0.72 0.17 158);
+  --accent-warning: oklch(0.8 0.16 78);
+  --accent-danger: oklch(0.63 0.23 25);
+  --danger-ink: oklch(0.72 0.18 25);
+  --success-ink: oklch(0.78 0.15 158);
+  --warning-ink: oklch(0.84 0.14 78);
+
+  --brand: oklch(0.66 0.21 285);
+  --brand-2: oklch(0.68 0.17 215);
+  --brand-3: oklch(0.72 0.19 340);
+  --mod: var(--brand);
+  --gradient-brand: linear-gradient(120deg, var(--brand-3), var(--brand) 45%, var(--brand-2));
+  --gradient-mod: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--mod) 85%, transparent),
+    color-mix(in oklab, var(--mod) 35%, var(--bg-surface))
+  );
+  --shadow-glow: 0 18px 50px -18px color-mix(in oklab, var(--mod) 65%, transparent);
 
   /* Scrim behind modals/sheets (deep, near-black with blue cast) */
   --sv-overlay: rgb(2 4 9 / 62%);
@@ -206,15 +226,15 @@
   --paper-text: #23201a;
   --paper-text-dim: #6b6456;
 
-  /* Module accents — bright (≈400-level) for legibility on near-black */
-  --mod-accounts: #34d399;
-  --mod-defence: #fb7185;
-  --mod-engineering: #facc15;
-  --mod-hr: #f472b6;
-  --mod-npd: #a78bfa;
-  --mod-other: #94a3b8;
-  --mod-qa: #2dd4bf;
-  --mod-railway: #60a5fa;
+  /* Module accents — Docman oklch hues */
+  --mod-accounts: oklch(0.75 0.17 158);
+  --mod-defence: oklch(0.66 0.13 195);
+  --mod-engineering: oklch(0.72 0.17 215);
+  --mod-hr: oklch(0.72 0.19 340);
+  --mod-npd: oklch(0.7 0.2 300);
+  --mod-other: oklch(0.7 0.05 268);
+  --mod-qa: oklch(0.8 0.16 78);
+  --mod-railway: oklch(0.68 0.18 35);
 
   /* Elevation — border/edge + tight ambient; modal adds indigo glow */
   --sv-shadow-card:
@@ -237,9 +257,20 @@
   --text-primary: #14171f;
   --text-secondary: #565d6b;
   --text-faint: #4b5563;
-  --accent-primary: #4338ca; /* fill + ink — 7.9:1 on white */
-  --accent-ink: #4338ca;
-  --accent-2: #6d28d9;
+  --accent-primary: oklch(0.48 0.21 285);
+  --accent-ink: oklch(0.42 0.2 285);
+  --accent-2: oklch(0.5 0.14 215);
+  --brand: oklch(0.48 0.21 285);
+  --brand-2: oklch(0.5 0.14 215);
+  --brand-3: oklch(0.52 0.18 340);
+  --mod: var(--brand);
+  --gradient-brand: linear-gradient(120deg, var(--brand-3), var(--brand) 45%, var(--brand-2));
+  --gradient-mod: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--mod) 70%, white),
+    color-mix(in oklab, var(--mod) 28%, var(--bg-surface))
+  );
+  --shadow-glow: 0 18px 50px -18px color-mix(in oklab, var(--mod) 40%, transparent);
   --accent-success: #166534;
   --accent-warning: #92400e;
   --accent-danger: #b91c1c;
@@ -277,6 +308,12 @@
   html,
   body,
   #root {
+    min-height: 100%;
+    min-height: 100dvh;
+  }
+
+  html,
+  body {
     height: 100%;
     height: 100dvh;
   }
@@ -285,20 +322,17 @@
     @apply bg-background text-foreground antialiased;
     margin: 0;
     font-family: var(--font-sans);
-    background:
-      radial-gradient(1000px 520px at 12% -8%, rgb(99 102 241 / 14%), transparent 55%),
-      radial-gradient(800px 420px at 92% 0%, rgb(34 197 94 / 6%), transparent 50%),
-      var(--bg-base);
+    background-color: var(--bg-base);
     color: var(--text-primary);
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Light mode: soften the ambient glows so they don't muddy a paper-like UI */
-  [data-theme='light'] body {
-    background:
-      radial-gradient(1000px 520px at 12% -8%, rgb(79 70 229 / 6%), transparent 55%),
-      radial-gradient(800px 420px at 92% 0%, rgb(21 128 61 / 4%), transparent 50%),
-      var(--bg-base);
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
   }
 
   /* File names, timestamps and IDs render in the monospace stack */
@@ -316,6 +350,141 @@
       --sv-sidebar-width: 240px;
     }
   }
+}
+
+/* ---------- Docman landing utilities (login + upcoming module pages) ---------- */
+
+@utility text-gradient-brand {
+  background-image: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-gradient-brand {
+  background-image: var(--gradient-brand);
+}
+
+@utility bg-gradient-mod {
+  background-image: var(--gradient-mod);
+}
+
+@utility mod-tile {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--mod) 35%, transparent);
+  background:
+    radial-gradient(
+      120% 120% at 100% 0%,
+      color-mix(in oklab, var(--mod) 28%, transparent),
+      transparent 60%
+    ),
+    var(--bg-surface);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+
+  &:hover {
+    transform: translateY(-6px);
+    border-color: color-mix(in oklab, var(--mod) 65%, transparent);
+    box-shadow: var(--shadow-glow);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &:hover {
+      transform: none;
+    }
+  }
+}
+
+@utility mod-chip {
+  background: color-mix(in oklab, var(--mod) 20%, transparent);
+  color: color-mix(in oklab, var(--mod) 78%, var(--text-primary));
+  border: 1px solid color-mix(in oklab, var(--mod) 40%, transparent);
+}
+
+@utility mod-icon {
+  background: var(--gradient-mod);
+  color: oklch(0.14 0.02 268);
+  box-shadow: var(--shadow-glow);
+}
+
+@utility text-mod {
+  color: color-mix(in oklab, var(--mod) 80%, var(--text-primary));
+}
+
+@utility glass-panel {
+  background: color-mix(in oklab, var(--bg-surface) 80%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  box-shadow: var(--sv-shadow-card);
+}
+
+@utility aurora {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -20% -10% auto -10%;
+    height: 70vh;
+    z-index: -1;
+    background:
+      radial-gradient(
+        45% 55% at 15% 20%,
+        color-mix(in oklab, var(--brand-3) 40%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        45% 55% at 80% 10%,
+        color-mix(in oklab, var(--brand-2) 38%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        50% 60% at 50% 40%,
+        color-mix(in oklab, var(--brand) 32%, transparent),
+        transparent 70%
+      );
+    filter: blur(30px);
+  }
+}
+
+@utility aurora-mod {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -25% -10% auto -10%;
+    height: 60vh;
+    z-index: -1;
+    background:
+      radial-gradient(
+        45% 60% at 20% 15%,
+        color-mix(in oklab, var(--mod) 45%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        40% 55% at 85% 5%,
+        color-mix(in oklab, var(--mod) 28%, transparent),
+        transparent 70%
+      );
+    filter: blur(34px);
+  }
+}
+
+@utility grid-mesh {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(70% 60% at 50% 30%, oklch(0 0 0 / 90%), transparent 75%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 30%, oklch(0 0 0 / 90%), transparent 75%);
 }
 
 /* App-shell ambient surface — a calm "vault / control-panel" depth layer sat

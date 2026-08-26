@@ -13,7 +13,7 @@ type InputProps = React.ComponentProps<'input'> & {
   swaps to the danger token. Password inputs get an inline show/hide toggle.
   Purely presentational: no validation or form logic.
 */
-function Input({ className, type = 'text', error, ...props }: InputProps): React.JSX.Element {
+function Input({ className, type = 'text', error, ref, ...props }: InputProps): React.JSX.Element {
   const [reveal, setReveal] = React.useState(false)
   const isPassword = type === 'password'
   const resolvedType = isPassword && reveal ? 'text' : type
@@ -33,6 +33,7 @@ function Input({ className, type = 'text', error, ...props }: InputProps): React
       type={resolvedType}
       aria-invalid={error || undefined}
       className={inputClass}
+      ref={ref}
       {...props}
     />
   )

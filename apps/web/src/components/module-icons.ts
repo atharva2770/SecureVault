@@ -1,24 +1,24 @@
 import {
-  CheckCircle2,
+  Banknote,
+  Boxes,
+  ClipboardCheck,
+  Cog,
   Folder,
-  Layers,
   Lightbulb,
-  ShieldHalf,
+  ShieldCheck,
   Train,
   Users,
-  Wallet,
-  Wrench,
   type LucideIcon
 } from 'lucide-react'
 
 export const MODULE_ICONS: Record<string, LucideIcon> = {
-  accounts: Wallet,
-  defence: ShieldHalf,
-  engineering: Wrench,
+  accounts: Banknote,
+  defence: ShieldCheck,
+  engineering: Cog,
   hr: Users,
   npd: Lightbulb,
-  other: Layers,
-  qa: CheckCircle2,
+  other: Boxes,
+  qa: ClipboardCheck,
   railway: Train
 }
 
