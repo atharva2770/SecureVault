@@ -10,6 +10,13 @@ export interface VaultSearchResults {
 
 const EMPTY: VaultSearchResults = { modules: [], folders: [], files: [] }
 
+/** Hard cap so a pasted payload cannot become a ReDoS / LIKE bomb if search moves server-side. */
+export const MAX_SEARCH_QUERY_LENGTH = 200
+
+export function normalizeSearchQuery(term: string): string {
+  return term.trim().slice(0, MAX_SEARCH_QUERY_LENGTH)
+}
+
 /**
  * Rights-aware global search.
  *
@@ -20,7 +27,7 @@ const EMPTY: VaultSearchResults = { modules: [], folders: [], files: [] }
  * unchanged.
  */
 export async function searchVault(term: string): Promise<VaultSearchResults> {
-  const q = term.trim().toLowerCase()
+  const q = normalizeSearchQuery(term).toLowerCase()
   if (q.length < 2) return EMPTY
 
   const [sidebar, files] = await Promise.all([api.ensureSidebar(), api.listFiles({})])

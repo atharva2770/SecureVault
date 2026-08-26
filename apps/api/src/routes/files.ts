@@ -5,10 +5,20 @@ import { unlink } from 'node:fs/promises'
 import { extname } from 'node:path'
 import type { Readable } from 'node:stream'
 import type { FastifyInstance } from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
+import { apiConfig } from '../config'
 import { getVaultFileService } from '../filesContext'
 import { HttpError, sendError } from '../httpErrors'
 import { requireSession } from '../plugins/auth'
+import {
+  downloadFileBodySchema,
+  fileIdParamsSchema,
+  listFilesQuerySchema,
+  moveOrCopyBodySchema,
+  renameFileBodySchema,
+  uploadFieldsSchema
+} from '../schemas/files'
 
 function multipartValue(
   fields: Record<string, unknown> | undefined,
@@ -40,6 +50,32 @@ function contentDisposition(fileName: string): string {
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`
 }
 
+/** Content types that a browser may execute/script if rendered inline. */
+const UNSAFE_INLINE_TYPES = new Set([
+  'text/html',
+  'application/xhtml+xml',
+  'image/svg+xml',
+  'text/xml',
+  'application/xml',
+  'text/javascript',
+  'application/javascript',
+  'application/ecmascript',
+  'text/ecmascript'
+])
+
+/**
+ * Never return a user-uploaded file with a content type the browser might
+ * execute as HTML/script. Such types are downgraded to an opaque binary type so
+ * the response is downloaded, not rendered.
+ */
+function safeResponseContentType(mime: string | null): string {
+  const value = (mime || '').trim().toLowerCase()
+  if (!value || UNSAFE_INLINE_TYPES.has(value.split(';')[0].trim())) {
+    return 'application/octet-stream'
+  }
+  return mime as string
+}
+
 function downloadFileName(displayName: string, originalFileName: string): string {
   const originalExt = extname(originalFileName)
   const base = displayName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 180) || 'file'
@@ -52,21 +88,24 @@ function downloadFileName(displayName: string, originalFileName: string): string
 export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   const listed = FileQueryService.getInstance()
   const vault = getVaultFileService()
+  const r = app.withTypeProvider<ZodTypeProvider>()
 
-  app.get('/api/files', async (request, reply) => {
+  r.get('/api/files', { schema: { querystring: listFilesQuerySchema } }, async (request, reply) => {
     try {
       const session = requireSession(request)
-      const query = request.query as { folderId?: string; categoryId?: string }
       return await listed.listFiles(session.userId, {
-        folderId: query.folderId || undefined,
-        categoryId: query.categoryId || undefined
+        folderId: request.query.folderId,
+        categoryId: request.query.categoryId
       })
     } catch (error) {
       return sendError(reply, error)
     }
   })
 
-  app.post('/api/files', async (request, reply) => {
+  r.post(
+    '/api/files',
+    { bodyLimit: apiConfig.maxUploadBytes },
+    async (request, reply) => {
     let uploaded: MultipartFile | undefined
     try {
       const session = requireSession(request)
@@ -76,20 +115,21 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         throw new HttpError(400, 'A file part named "file" is required.')
       }
 
-      const displayName = multipartValue(uploaded.fields, 'displayName')
-      const categoryId = multipartValue(uploaded.fields, 'categoryId')
-      const folderId = multipartValue(uploaded.fields, 'folderId') || null
-
-      if (!displayName || !categoryId) {
+      const parsed = uploadFieldsSchema.safeParse({
+        displayName: multipartValue(uploaded.fields, 'displayName'),
+        categoryId: multipartValue(uploaded.fields, 'categoryId'),
+        folderId: multipartValue(uploaded.fields, 'folderId') || undefined
+      })
+      if (!parsed.success) {
         await drainStream(uploaded.file)
-        throw new HttpError(400, 'displayName and categoryId are required.')
+        throw new HttpError(400, 'Invalid request.')
       }
 
       const record = await vault.addFile({
         userId: session.userId,
-        displayName,
-        categoryId,
-        folderId,
+        displayName: parsed.data.displayName,
+        categoryId: parsed.data.categoryId,
+        folderId: parsed.data.folderId ?? null,
         originalFileName: uploaded.filename || 'upload.bin',
         mimeType: uploaded.mimetype || null,
         body: uploaded.file
@@ -104,28 +144,28 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.post('/api/files/:fileId/download', async (request, reply) => {
+  r.post(
+    '/api/files/:fileId/download',
+    { schema: { params: fileIdParamsSchema, body: downloadFileBodySchema } },
+    async (request, reply) => {
     let tempPath: string | null = null
     try {
       const session = requireSession(request)
-      const { fileId } = request.params as { fileId: string }
-      const body = (request.body ?? {}) as { password?: string; intent?: string }
-      const password = body.password?.trim() ?? ''
-      if (!password) {
-        throw new HttpError(400, 'File password is required.')
-      }
+      const { fileId } = request.params
+      const { password, intent } = request.body
 
       const downloaded = await vault.downloadToTemp(session.userId, fileId, password, {
         kek: session.kek,
-        intent: body.intent === 'download' ? 'copy' : 'view'
+        intent: intent === 'download' || intent === 'copy' ? 'copy' : 'view'
       })
       tempPath = downloaded.tempPath
       const name = downloadFileName(downloaded.displayName, downloaded.originalFileName)
 
-      reply.header('Content-Type', downloaded.mimeType || 'application/octet-stream')
+      reply.header('Content-Type', safeResponseContentType(downloaded.mimeType))
       reply.header('Content-Disposition', contentDisposition(name))
       reply.header('X-Checksum-SHA256', downloaded.checksum)
       reply.header('X-Content-Type-Options', 'nosniff')
+      reply.header('Content-Security-Policy', "default-src 'none'; sandbox")
 
       const stream = createReadStream(downloaded.tempPath)
       const cleanup = (): void => {
@@ -145,55 +185,64 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.delete('/api/files/:fileId', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { fileId } = request.params as { fileId: string }
-      return await vault.deleteFile(session.userId, fileId)
-    } catch (error) {
-      return sendError(reply, error)
+  r.delete(
+    '/api/files/:fileId',
+    { schema: { params: fileIdParamsSchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await vault.deleteFile(session.userId, request.params.fileId)
+      } catch (error) {
+        return sendError(reply, error)
+      }
     }
-  })
+  )
 
-  app.post('/api/files/:fileId/move', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { fileId } = request.params as { fileId: string }
-      const body = (request.body ?? {}) as { targetFolderId?: string }
-      return await vault.moveFile(session.userId, {
-        fileId,
-        targetFolderId: body.targetFolderId ?? ''
-      })
-    } catch (error) {
-      return sendError(reply, error)
+  r.post(
+    '/api/files/:fileId/move',
+    { schema: { params: fileIdParamsSchema, body: moveOrCopyBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await vault.moveFile(session.userId, {
+          fileId: request.params.fileId,
+          targetFolderId: request.body.targetFolderId
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
     }
-  })
+  )
 
-  app.post('/api/files/:fileId/copy', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { fileId } = request.params as { fileId: string }
-      const body = (request.body ?? {}) as { targetFolderId?: string }
-      return await vault.copyFile(session.userId, {
-        fileId,
-        targetFolderId: body.targetFolderId ?? ''
-      })
-    } catch (error) {
-      return sendError(reply, error)
+  r.post(
+    '/api/files/:fileId/copy',
+    { schema: { params: fileIdParamsSchema, body: moveOrCopyBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await vault.copyFile(session.userId, {
+          fileId: request.params.fileId,
+          targetFolderId: request.body.targetFolderId
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
     }
-  })
+  )
 
-  app.post('/api/files/:fileId/rename', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { fileId } = request.params as { fileId: string }
-      const body = (request.body ?? {}) as { displayName?: string }
-      return await vault.renameFile(session.userId, {
-        fileId,
-        displayName: body.displayName ?? ''
-      })
-    } catch (error) {
-      return sendError(reply, error)
+  r.post(
+    '/api/files/:fileId/rename',
+    { schema: { params: fileIdParamsSchema, body: renameFileBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await vault.renameFile(session.userId, {
+          fileId: request.params.fileId,
+          displayName: request.body.displayName
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
     }
-  })
+  )
 }

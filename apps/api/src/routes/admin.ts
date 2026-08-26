@@ -1,13 +1,25 @@
 import { AdminService } from '@securevault/core'
 import type { FastifyInstance } from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import { sendError } from '../httpErrors'
 import { requireSession } from '../plugins/auth'
+import {
+  createUserBodySchema,
+  folderAclIdParamsSchema,
+  folderIdParamsSchema,
+  setFolderAclBodySchema,
+  setUserDisabledBodySchema,
+  setUserFolderAccessBodySchema,
+  setUserRolesBodySchema,
+  userIdParamsSchema
+} from '../schemas/admin'
 
 export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   const admin = AdminService.getInstance()
+  const r = app.withTypeProvider<ZodTypeProvider>()
 
-  app.get('/api/admin/users', async (request, reply) => {
+  r.get('/api/admin/users', async (request, reply) => {
     try {
       return await admin.listUsers(requireSession(request).userId)
     } catch (error) {
@@ -15,120 +27,108 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.post('/api/admin/users', async (request, reply) => {
+  r.post('/api/admin/users', { schema: { body: createUserBodySchema } }, async (request, reply) => {
     try {
       const session = requireSession(request)
-      const body = (request.body ?? {}) as {
-        username?: string
-        password?: string
-        roleCode?: string
-        grantAllCategoryRoots?: boolean
-        folderIds?: string[]
-        folderGrants?: Array<{
-          folderId?: string
-          canView?: boolean
-          canEdit?: boolean
-          canCopy?: boolean
-          canDelete?: boolean
-          inherit?: boolean
-        }>
-      }
+      const body = request.body
       return await admin.createUser(session.userId, {
-        username: body.username ?? '',
-        password: body.password ?? '',
+        username: body.username,
+        password: body.password,
         roleCode: body.roleCode ?? 'MEMBER',
         grantAllCategoryRoots: body.grantAllCategoryRoots,
-        folderIds: Array.isArray(body.folderIds) ? body.folderIds : undefined,
-        folderGrants: Array.isArray(body.folderGrants)
-          ? body.folderGrants.map((g) => ({
-              folderId: g.folderId ?? '',
-              canView: Boolean(g.canView),
-              canEdit: Boolean(g.canEdit),
-              canCopy: Boolean(g.canCopy),
-              canDelete: Boolean(g.canDelete),
+        folderIds: body.folderIds,
+        folderGrants: body.folderGrants?.map((g) => ({
+          folderId: g.folderId,
+          canView: g.canView,
+          canEdit: g.canEdit,
+          canCopy: g.canCopy,
+          canDelete: g.canDelete,
+          inherit: g.inherit !== false
+        }))
+      })
+    } catch (error) {
+      return sendError(reply, error)
+    }
+  })
+
+  r.patch(
+    '/api/admin/users/:userId/roles',
+    { schema: { params: userIdParamsSchema, body: setUserRolesBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await admin.setUserRoles(session.userId, {
+          userId: request.params.userId,
+          roleCodes: request.body.roleCodes
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
+    }
+  )
+
+  r.patch(
+    '/api/admin/users/:userId/disabled',
+    { schema: { params: userIdParamsSchema, body: setUserDisabledBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await admin.setUserDisabled(
+          session.userId,
+          request.params.userId,
+          request.body.isDisabled
+        )
+      } catch (error) {
+        return sendError(reply, error)
+      }
+    }
+  )
+
+  r.get(
+    '/api/admin/users/:userId/folder-access',
+    { schema: { params: userIdParamsSchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await admin.getUserFolderAccess(session.userId, request.params.userId)
+      } catch (error) {
+        return sendError(reply, error)
+      }
+    }
+  )
+
+  r.put(
+    '/api/admin/users/:userId/folder-access',
+    { schema: { params: userIdParamsSchema, body: setUserFolderAccessBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        const body = request.body
+        const grants = body.grants
+          ? body.grants.map((g) => ({
+              folderId: g.folderId,
+              canView: g.canView,
+              canEdit: g.canEdit,
+              canCopy: g.canCopy,
+              canDelete: g.canDelete,
               inherit: g.inherit !== false
             }))
-          : undefined
-      })
-    } catch (error) {
-      return sendError(reply, error)
-    }
-  })
-
-  app.patch('/api/admin/users/:userId/roles', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { userId } = request.params as { userId: string }
-      const body = (request.body ?? {}) as { roleCodes?: string[] }
-      return await admin.setUserRoles(session.userId, {
-        userId,
-        roleCodes: body.roleCodes ?? []
-      })
-    } catch (error) {
-      return sendError(reply, error)
-    }
-  })
-
-  app.patch('/api/admin/users/:userId/disabled', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { userId } = request.params as { userId: string }
-      const body = (request.body ?? {}) as { isDisabled?: boolean }
-      return await admin.setUserDisabled(session.userId, userId, Boolean(body.isDisabled))
-    } catch (error) {
-      return sendError(reply, error)
-    }
-  })
-
-  app.get('/api/admin/users/:userId/folder-access', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { userId } = request.params as { userId: string }
-      return await admin.getUserFolderAccess(session.userId, userId)
-    } catch (error) {
-      return sendError(reply, error)
-    }
-  })
-
-  app.put('/api/admin/users/:userId/folder-access', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { userId } = request.params as { userId: string }
-      const body = (request.body ?? {}) as {
-        grants?: Array<{
-          folderId?: string
-          canView?: boolean
-          canEdit?: boolean
-          canCopy?: boolean
-          canDelete?: boolean
-          inherit?: boolean
-        }>
-        folderIds?: string[]
+          : (body.folderIds ?? []).map((folderId) => ({
+              folderId,
+              canView: true,
+              canEdit: true,
+              canCopy: true,
+              canDelete: true,
+              inherit: true
+            }))
+        return await admin.setUserFolderAccess(session.userId, request.params.userId, grants)
+      } catch (error) {
+        return sendError(reply, error)
       }
-      const grants = Array.isArray(body.grants)
-        ? body.grants.map((g) => ({
-            folderId: g.folderId ?? '',
-            canView: Boolean(g.canView),
-            canEdit: Boolean(g.canEdit),
-            canCopy: Boolean(g.canCopy),
-            canDelete: Boolean(g.canDelete),
-            inherit: g.inherit !== false
-          }))
-        : (body.folderIds ?? []).map((folderId) => ({
-            folderId,
-            canView: true,
-            canEdit: true,
-            canCopy: true,
-            canDelete: true,
-            inherit: true
-          }))
-      return await admin.setUserFolderAccess(session.userId, userId, grants)
-    } catch (error) {
-      return sendError(reply, error)
     }
-  })
+  )
 
-  app.get('/api/admin/roles', async (request, reply) => {
+  r.get('/api/admin/roles', async (request, reply) => {
     try {
       return await admin.listRoles(requireSession(request).userId)
     } catch (error) {
@@ -136,7 +136,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.get('/api/admin/folders', async (request, reply) => {
+  r.get('/api/admin/folders', async (request, reply) => {
     try {
       return await admin.listAclFolders(requireSession(request).userId)
     } catch (error) {
@@ -144,55 +144,56 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.get('/api/admin/folders/:folderId/acls', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { folderId } = request.params as { folderId: string }
-      return await admin.listFolderAcls(session.userId, folderId)
-    } catch (error) {
-      return sendError(reply, error)
-    }
-  })
-
-  app.put('/api/admin/folders/:folderId/acls', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { folderId } = request.params as { folderId: string }
-      const body = (request.body ?? {}) as {
-        principalType?: 'USER' | 'ROLE'
-        principalId?: string
-        canView?: boolean
-        canEdit?: boolean
-        canCopy?: boolean
-        canDelete?: boolean
-        inherit?: boolean
+  r.get(
+    '/api/admin/folders/:folderId/acls',
+    { schema: { params: folderIdParamsSchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await admin.listFolderAcls(session.userId, request.params.folderId)
+      } catch (error) {
+        return sendError(reply, error)
       }
-      return await admin.setFolderAcl(session.userId, {
-        folderId,
-        principalType: body.principalType === 'ROLE' ? 'ROLE' : 'USER',
-        principalId: body.principalId ?? '',
-        canView: Boolean(body.canView),
-        canEdit: Boolean(body.canEdit),
-        canCopy: Boolean(body.canCopy),
-        canDelete: Boolean(body.canDelete),
-        inherit: body.inherit
-      })
-    } catch (error) {
-      return sendError(reply, error)
     }
-  })
+  )
 
-  app.delete('/api/admin/acls/:folderAclId', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const { folderAclId } = request.params as { folderAclId: string }
-      return await admin.revokeFolderAcl(session.userId, folderAclId)
-    } catch (error) {
-      return sendError(reply, error)
+  r.put(
+    '/api/admin/folders/:folderId/acls',
+    { schema: { params: folderIdParamsSchema, body: setFolderAclBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        const body = request.body
+        return await admin.setFolderAcl(session.userId, {
+          folderId: request.params.folderId,
+          principalType: body.principalType === 'ROLE' ? 'ROLE' : 'USER',
+          principalId: body.principalId,
+          canView: Boolean(body.canView),
+          canEdit: Boolean(body.canEdit),
+          canCopy: Boolean(body.canCopy),
+          canDelete: Boolean(body.canDelete),
+          inherit: body.inherit
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
     }
-  })
+  )
 
-  app.get('/api/admin/my-access', async (request, reply) => {
+  r.delete(
+    '/api/admin/acls/:folderAclId',
+    { schema: { params: folderAclIdParamsSchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        return await admin.revokeFolderAcl(session.userId, request.params.folderAclId)
+      } catch (error) {
+        return sendError(reply, error)
+      }
+    }
+  )
+
+  r.get('/api/admin/my-access', async (request, reply) => {
     try {
       return await admin.getMyAccess(requireSession(request).userId)
     } catch (error) {

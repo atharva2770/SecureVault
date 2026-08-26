@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { access } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
 
+import { assertPathInsideRoot } from '../utils/pathContainment'
 import type { BlobStore } from './BlobStore'
 
 function workspaceRoot(): string {
@@ -27,14 +28,18 @@ export function resolveVaultBlobRoot(): string {
 /**
  * Locate ciphertext for a Files.StoredBlobPath value.
  * Accepts `svblob:local/...` URIs and leftover absolute paths from older uploads.
+ * The resolved path is always constrained to `root` (defaults to VAULT_BLOB_ROOT)
+ * so a stored value can never be used as a path-traversal vector.
  */
 export async function resolveCiphertextPath(
   storedBlobPath: string,
-  blobs: BlobStore
+  blobs: BlobStore,
+  root: string = resolveVaultBlobRoot()
 ): Promise<string> {
   const key = blobs.parseUri(storedBlobPath)
   if (key) {
-    return blobs.resolveReadPath(key)
+    const abs = await blobs.resolveReadPath(key)
+    return assertPathInsideRoot(root, abs)
   }
 
   const trimmed = storedBlobPath.trim()
@@ -43,9 +48,10 @@ export async function resolveCiphertextPath(
   }
 
   const candidate = isAbsolute(trimmed) ? trimmed : resolve(trimmed)
+  const contained = assertPathInsideRoot(root, candidate)
   try {
-    await access(candidate)
-    return candidate
+    await access(contained)
+    return contained
   } catch {
     throw new Error('Encrypted file data was not found on this machine.')
   }

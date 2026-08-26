@@ -1,8 +1,9 @@
 import { createReadStream } from 'node:fs'
 import { copyFile, mkdir, unlink } from 'node:fs/promises'
-import { dirname, resolve, sep } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import type { Readable } from 'node:stream'
 
+import { assertPathInsideRoot } from '../utils/pathContainment'
 import type { BlobStore } from './BlobStore'
 import {
   LOCAL_BLOB_ADAPTER,
@@ -64,10 +65,10 @@ export class LocalBlobStore implements BlobStore {
     }
     const root = resolve(this.rootDir)
     const abs = resolve(root, ...normalized.split('/'))
-    const prefix = root.endsWith(sep) ? root : `${root}${sep}`
-    if (abs !== root && !abs.startsWith(prefix)) {
+    try {
+      return assertPathInsideRoot(root, abs)
+    } catch {
       throw new Error('Invalid blob key.')
     }
-    return abs
   }
 }

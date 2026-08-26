@@ -15,6 +15,7 @@
     "dev:web": "npm run dev -w @securevault/web",
     "build": "npm run build -w @securevault/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "format": "prettier --write .",
     "db:generate": "npm run generate -w @securevault/db",
     "db:migrate": "npm run migrate:dev -w @securevault/db",

@@ -1,5 +1,6 @@
 import { AuthCredentials, secureZero } from '@securevault/core'
 import type { FastifyInstance } from 'fastify'
+import type { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 import { apiConfig } from '../config'
 import { clientMeta, sendError } from '../httpErrors'
@@ -17,6 +18,7 @@ import {
   recordRegisterAttempt,
   TooManyAttemptsError
 } from '../plugins/rateLimit'
+import { changePasswordBodySchema, loginBodySchema, registerBodySchema } from '../schemas/auth'
 import { httpSessions } from '../session'
 
 function sessionPayload(unlocked: boolean, session: ReturnType<typeof httpSessions.create> | null) {
@@ -38,8 +40,9 @@ function sessionPayload(unlocked: boolean, session: ReturnType<typeof httpSessio
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   const credentials = AuthCredentials.getInstance()
+  const r = app.withTypeProvider<ZodTypeProvider>()
 
-  app.post('/api/auth/register', async (request, reply) => {
+  r.post('/api/auth/register', { schema: { body: registerBodySchema } }, async (request, reply) => {
     try {
       try {
         assertRegisterAllowed(request.ip)
@@ -53,8 +56,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         throw error
       }
       recordRegisterAttempt(request.ip)
-      const body = (request.body ?? {}) as { username?: string; password?: string }
-      const result = await credentials.register(body.username ?? '', body.password ?? '', {
+      const { username, password } = request.body
+      const result = await credentials.register(username, password, {
         ipOrDevice: clientMeta(request)
       })
       try {
@@ -76,9 +79,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.post('/api/auth/login', async (request, reply) => {
-    const body = (request.body ?? {}) as { username?: string; password?: string }
-    const username = body.username ?? ''
+  r.post('/api/auth/login', { schema: { body: loginBodySchema } }, async (request, reply) => {
+    const { username, password } = request.body
     try {
       assertLoginAllowed(request.ip, username)
     } catch (error) {
@@ -92,7 +94,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const result = await credentials.login(username, body.password ?? '', {
+      const result = await credentials.login(username, password, {
         ipOrDevice: clientMeta(request)
       })
       recordLoginSuccess(request.ip, username)
@@ -116,17 +118,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.post('/api/auth/logout', async (request, reply) => {
+  r.post('/api/auth/logout', async (request, reply) => {
     httpSessions.destroy(readSessionId(request))
     clearSessionCookie(reply)
     return sessionPayload(false, null)
   })
 
-  app.get('/api/auth/session', async (request) => {
+  r.get('/api/auth/session', async (request) => {
     return sessionPayload(Boolean(request.vaultSession), request.vaultSession)
   })
 
-  app.post('/api/auth/touch', async (request, reply) => {
+  r.post('/api/auth/touch', async (request, reply) => {
     try {
       requireSession(request)
       return { ok: true, idleTimeoutMs: apiConfig.idleTimeoutMs }
@@ -135,26 +137,22 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
   })
 
-  app.post('/api/auth/change-password', async (request, reply) => {
-    try {
-      const session = requireSession(request)
-      const body = (request.body ?? {}) as {
-        currentPassword?: string
-        newPassword?: string
+  r.post(
+    '/api/auth/change-password',
+    { schema: { body: changePasswordBodySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        const { currentPassword, newPassword } = request.body
+        const result = await credentials.changePassword(session.userId, currentPassword, newPassword)
+        const currentSessionId = readSessionId(request)
+        httpSessions.destroyAllForUser(session.userId, currentSessionId)
+        httpSessions.replaceKek(currentSessionId, result.kek)
+        secureZero(result.kek)
+        return { ok: true }
+      } catch (error) {
+        return sendError(reply, error)
       }
-      const result = await credentials.changePassword(
-        session.userId,
-        body.currentPassword ?? '',
-        body.newPassword ?? ''
-      )
-      const currentSessionId = readSessionId(request)
-      // A credential change invalidates every other live session for this user.
-      httpSessions.destroyAllForUser(session.userId, currentSessionId)
-      httpSessions.replaceKek(currentSessionId, result.kek)
-      secureZero(result.kek)
-      return { ok: true }
-    } catch (error) {
-      return sendError(reply, error)
     }
-  })
+  )
 }

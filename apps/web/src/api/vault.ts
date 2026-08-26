@@ -36,6 +36,18 @@ function emitLocked(): void {
   window.dispatchEvent(new Event('sv:locked'))
 }
 
+const CSRF_COOKIE_NAME = 'sv_csrf'
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/** Reads the double-submit CSRF token the API set as a readable cookie. */
+function readCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${CSRF_COOKIE_NAME}=`))
+  return match ? decodeURIComponent(match.slice(CSRF_COOKIE_NAME.length + 1)) : null
+}
+
 async function readError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string }
@@ -51,6 +63,12 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData
   if (init.body && !isForm && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
+  }
+
+  const method = (init.method ?? 'GET').toUpperCase()
+  if (!SAFE_METHODS.has(method) && !headers.has('x-csrf-token')) {
+    const token = readCsrfToken()
+    if (token) headers.set('x-csrf-token', token)
   }
 
   const res = await fetch(path, {

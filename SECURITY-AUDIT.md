@@ -173,11 +173,13 @@ These are intentionally **not** implemented in this backend-only pass because do
 blindly would either break the running SPA or requires infrastructure that can't be
 validated here. Each is ready to implement on confirmation:
 
-1. **CSRF double-submit token** — cookies + `sameSite=lax` + a single locked CORS origin
-   already block the classic cross-site POST vector, but the brief asks for an explicit
-   token. Implementing it means issuing a non-httpOnly CSRF cookie and requiring a
-   matching `x-csrf-token` header on all unsafe methods, plus wiring the header into the
-   web client's `apiFetch`. Full-stack; needs FE change.
+1. **CSRF double-submit token** — **DONE.** `apps/api/src/plugins/csrf.ts` issues a
+   readable `sv_csrf` cookie and rejects any unsafe `/api/*` method whose `x-csrf-token`
+   header doesn't match (timing-safe). CORS now allowlists the header explicitly, and the
+   web client (`apps/web/src/api/vault.ts`) echoes the cookie on every state-changing
+   request. Verified via typecheck + production build. (Dev/prod are same-origin via the
+   Vite `/api` proxy, so the SPA can read the cookie; split-origin deploys should serve the
+   SPA same-origin as the API or additionally surface the token in the session body.)
 2. **Step-up re-auth (A7)** — backend `reauthAt` gate + FE password prompt.
 3. **Self-service password reset (A6)** — needs an email provider; single-use, short-lived,
    random tokens; no address enumeration.

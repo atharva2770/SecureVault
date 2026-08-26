@@ -1,4 +1,6 @@
 export { secureZero, sha256Hex, safeEqualHex } from './utils/secure'
+export { assertPathInsideRoot } from './utils/pathContainment'
+export { escapeLikePattern } from './utils/likeEscape'
 
 export {
   CryptoService,

@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { File as FileIcon, Folder, Layers, Search, X } from 'lucide-react'
 
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'
-import { searchVault, totalResults } from '@/lib/search'
+import { MAX_SEARCH_QUERY_LENGTH, searchVault, totalResults } from '@/lib/search'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -33,9 +33,10 @@ export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean }): Re
   }, 250)
 
   function onChange(value: string): void {
-    setText(value)
-    setOpen(value.trim().length >= MIN_CHARS)
-    commit(value)
+    const next = value.slice(0, MAX_SEARCH_QUERY_LENGTH)
+    setText(next)
+    setOpen(next.trim().length >= MIN_CHARS)
+    commit(next)
   }
 
   function clear(): void {
