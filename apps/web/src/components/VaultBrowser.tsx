@@ -323,6 +323,7 @@ export default function VaultBrowser(): React.JSX.Element {
   const [fileNameFolder, setFileNameFolder] = useState<FolderDto | null>(null)
   const [navHistory, setNavHistory] = useState<Selection[]>([{ type: 'root' }])
   const search = searchParams.get('q') ?? ''
+  const [folderFilter, setFolderFilter] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -379,6 +380,10 @@ export default function VaultBrowser(): React.JSX.Element {
     )
   }, [routeSlugPath, folders])
 
+  const folderFilterTerm = folderFilter.trim()
+  const isFolderFiltering = selection.type === 'folder' && folderFilterTerm.length >= 2
+  const isSearching = search.trim().length > 0
+
   const filesQuery = useQuery({
     queryKey: ['files', selection],
     queryFn: () => {
@@ -386,13 +391,35 @@ export default function VaultBrowser(): React.JSX.Element {
         return api.listFiles({ folderId: selection.folderId })
       }
       return Promise.resolve([] as FileDto[])
-    }
+    },
+    enabled: selection.type === 'folder' && !isSearching && !isFolderFiltering
   })
 
-  const searchAllQuery = useQuery({
-    queryKey: ['files', 'search-all'],
-    queryFn: () => api.listFiles({}),
-    enabled: search.trim().length > 0
+  const globalSearchQuery = useQuery({
+    queryKey: ['search', 'global', search.trim()],
+    queryFn: () => api.search(search.trim(), { limit: 50 }),
+    enabled: isSearching
+  })
+
+  const folderSearchQuery = useQuery({
+    queryKey: [
+      'search',
+      'folder',
+      selection.type === 'folder' ? selection.folderId : '',
+      folderFilterTerm
+    ],
+    queryFn: () => {
+      const folderId = selection.type === 'folder' ? selection.folderId : ''
+      const hasChildren = folders.some((f) => f.parentFolderId === folderId)
+      const folder = folders.find((f) => f.folderId === folderId)
+      return api.searchFolder({
+        folderId,
+        q: folderFilterTerm,
+        includeSubfolders: Boolean(folder?.isCategoryRoot) || hasChildren,
+        limit: 50
+      })
+    },
+    enabled: isFolderFiltering
   })
 
   const uploadMutation = useMutation({
@@ -405,6 +432,7 @@ export default function VaultBrowser(): React.JSX.Element {
     onSuccess: async (file) => {
       setStatus(`Locked “${file.displayName}” in ${file.categoryName ?? 'vault'}.`)
       await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
       await queryClient.invalidateQueries({ queryKey: ['sidebar'] })
       void api.auth.touch()
     },
@@ -423,6 +451,7 @@ export default function VaultBrowser(): React.JSX.Element {
       setStatus(fileIds.length > 1 ? `Deleted ${fileIds.length} files.` : 'File deleted.')
       setSelectedFileIds([])
       await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
     },
     onError: (error: Error) => {
       setStatus(error.message || 'Delete failed.')
@@ -437,6 +466,7 @@ export default function VaultBrowser(): React.JSX.Element {
       setContextMenu(null)
       await queryClient.invalidateQueries({ queryKey: ['sidebar'] })
       await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
     },
     onError: (error: Error) => {
       setStatus(error.message || 'Could not delete folder.')
@@ -464,6 +494,7 @@ export default function VaultBrowser(): React.JSX.Element {
       setMoveError(null)
       setStatus(`Moved “${file.displayName}”.`)
       await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
       void api.auth.touch()
     },
     onError: (error: Error) => {
@@ -478,6 +509,7 @@ export default function VaultBrowser(): React.JSX.Element {
       setRenameError(null)
       setStatus(`Renamed to “${file.displayName}”.`)
       await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
       void api.auth.touch()
     },
     onError: (error: Error) => {
@@ -510,6 +542,7 @@ export default function VaultBrowser(): React.JSX.Element {
       if (mode === 'cut') setClipboard(null)
       setSelectedFileIds([])
       await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
       void api.auth.touch()
     },
     onError: (error: Error) => {
@@ -584,33 +617,39 @@ export default function VaultBrowser(): React.JSX.Element {
       }))
   }, [folders])
 
-  const q = search.trim().toLowerCase()
-  const isSearching = q.length > 0
-
   const visibleFiles = useMemo(() => {
-    const source = isSearching ? (searchAllQuery.data ?? []) : (filesQuery.data ?? [])
-    if (!q) return source
-    return source.filter(
-      (f) =>
-        f.displayName.toLowerCase().includes(q) ||
-        f.originalFileName.toLowerCase().includes(q) ||
-        (f.categoryName?.toLowerCase().includes(q) ?? false)
-    )
-  }, [filesQuery.data, searchAllQuery.data, isSearching, q])
+    if (isSearching) return globalSearchQuery.data?.files ?? []
+    if (isFolderFiltering) return folderSearchQuery.data?.items ?? []
+    return filesQuery.data ?? []
+  }, [
+    filesQuery.data,
+    folderSearchQuery.data,
+    globalSearchQuery.data,
+    isFolderFiltering,
+    isSearching
+  ])
 
   const visibleFolders = useMemo(() => {
-    if (isSearching) return []
-    if (!q) return childFolders
-    return childFolders.filter((f) => f.name.toLowerCase().includes(q))
-  }, [childFolders, isSearching, q])
+    if (isSearching) {
+      const g = globalSearchQuery.data
+      if (!g) return []
+      return [...g.modules, ...g.folders]
+    }
+    if (isFolderFiltering) {
+      const prefix = folderFilterTerm.toLowerCase()
+      return childFolders.filter((f) => f.name.toLowerCase().startsWith(prefix))
+    }
+    return childFolders
+  }, [childFolders, folderFilterTerm, globalSearchQuery.data, isFolderFiltering, isSearching])
 
   const fileById = useMemo(() => {
     const map = new Map<string, FileDto>()
     for (const f of visibleFiles) map.set(f.fileId, f)
     for (const f of filesQuery.data ?? []) map.set(f.fileId, f)
-    for (const f of searchAllQuery.data ?? []) map.set(f.fileId, f)
+    for (const f of folderSearchQuery.data?.items ?? []) map.set(f.fileId, f)
+    for (const f of globalSearchQuery.data?.files ?? []) map.set(f.fileId, f)
     return map
-  }, [visibleFiles, filesQuery.data, searchAllQuery.data])
+  }, [visibleFiles, filesQuery.data, folderSearchQuery.data, globalSearchQuery.data])
 
   const here = vaultActions(selectedFolder?.rights ?? EMPTY_RIGHTS)
   const canCreateSubfolder =
@@ -648,6 +687,7 @@ export default function VaultBrowser(): React.JSX.Element {
     setSelectedFolderRowId(null)
     setContextMenu(null)
     setSearch('')
+    setFolderFilter('')
     setSidebarOpen(false)
     if (pushHistory) {
       setNavHistory((prev) => [...prev, next])
@@ -1004,8 +1044,30 @@ export default function VaultBrowser(): React.JSX.Element {
     renameTarget
   ])
 
-  const isEmpty = !isSearching && visibleFolders.length === 0 && visibleFiles.length === 0
-  const loading = filesQuery.isLoading || (isSearching && searchAllQuery.isLoading)
+  const isEmpty =
+    !isSearching && !isFolderFiltering && visibleFolders.length === 0 && visibleFiles.length === 0
+  const loading = isSearching
+    ? globalSearchQuery.isLoading
+    : isFolderFiltering
+      ? folderSearchQuery.isLoading
+      : filesQuery.isLoading
+  const listError = isSearching
+    ? globalSearchQuery.isError
+    : isFolderFiltering
+      ? folderSearchQuery.isError
+      : filesQuery.isError
+  const listErrorMessage = (
+    (isSearching
+      ? globalSearchQuery.error
+      : isFolderFiltering
+        ? folderSearchQuery.error
+        : filesQuery.error) as Error | undefined
+  )?.message
+  const refetchList = (): void => {
+    if (isSearching) void globalSearchQuery.refetch()
+    else if (isFolderFiltering) void folderSearchQuery.refetch()
+    else void filesQuery.refetch()
+  }
   const moduleTheme = moduleThemeForCategory(
     breadcrumbs[0]?.name ?? selectedFolder?.name
   )
@@ -1014,6 +1076,7 @@ export default function VaultBrowser(): React.JSX.Element {
   const isFolderGrid =
     selection.type === 'folder' &&
     !isSearching &&
+    !isFolderFiltering &&
     (Boolean(selectedFolder?.isCategoryRoot) || childFolders.length > 0)
   const isImmersive = isDashboard || isFolderGrid
   const cutFileIds = useMemo(
@@ -1152,6 +1215,8 @@ export default function VaultBrowser(): React.JSX.Element {
                 childCountById={childCountById}
                 loading={sidebarQuery.isLoading}
                 denied={Boolean(selectedFolder && !selectedFolder.rights.view && !selectedFolder.traverseOnly)}
+                folderFilter={folderFilter}
+                onFolderFilterChange={setFolderFilter}
                 onOpenFolder={openFolder}
                 onPickFile={(folder) => setFileNameFolder(folder)}
               />
@@ -1263,16 +1328,18 @@ export default function VaultBrowser(): React.JSX.Element {
                 ))}
               </nav>
 
+              {selection.type === 'folder' && !isSearching ? (
               <div className="relative min-w-0 flex-1 basis-full sm:basis-auto sm:w-44 sm:flex-none md:w-52">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-sv-text-muted" />
                 <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={folderFilter}
+                  onChange={(e) => setFolderFilter(e.target.value)}
                   placeholder="Filter this folder…"
                   aria-label="Filter this folder"
                   className="h-11 w-full rounded-md border border-sv-border bg-sv-bg pr-2 pl-8 text-sm text-sv-text outline-none placeholder:text-sv-text-muted focus:border-sv-accent focus:ring-2 focus:ring-sv-accent focus:ring-offset-2 focus:ring-offset-sv-surface sm:h-9 sm:text-xs"
                 />
               </div>
+              ) : null}
 
               {canCreateSubfolder ? (
                 <Button
@@ -1464,6 +1531,16 @@ export default function VaultBrowser(): React.JSX.Element {
             {isSearching ? (
               <p className="px-3 py-2 text-xs text-sv-text-muted sm:px-4">
                 Search results across vault
+                {globalSearchQuery.data?.fileTotal != null
+                  ? ` · ${globalSearchQuery.data.fileTotal} file${globalSearchQuery.data.fileTotal === 1 ? '' : 's'}`
+                  : ''}
+              </p>
+            ) : isFolderFiltering ? (
+              <p className="px-3 py-2 text-xs text-sv-text-muted sm:px-4">
+                Files in this folder starting with “{folderFilterTerm}”
+                {folderSearchQuery.data?.total != null
+                  ? ` · ${folderSearchQuery.data.total}`
+                  : ''}
               </p>
             ) : null}
 
@@ -1480,16 +1557,20 @@ export default function VaultBrowser(): React.JSX.Element {
                   <FileRowSkeleton key={i} />
                 ))}
               </ul>
-            ) : (isSearching ? searchAllQuery.isError : filesQuery.isError) ? (
+            ) : listError ? (
               <ErrorState
-                title={isSearching ? 'Search didn’t finish' : 'This folder didn’t load'}
+                title={
+                  isSearching
+                    ? 'Search didn’t finish'
+                    : isFolderFiltering
+                      ? 'Folder search didn’t finish'
+                      : 'This folder didn’t load'
+                }
                 description={
-                  ((isSearching ? searchAllQuery.error : filesQuery.error) as Error)?.message ||
+                  listErrorMessage ||
                   'We couldn’t list files just now. Try again — nothing has been changed.'
                 }
-                onRetry={() =>
-                  void (isSearching ? searchAllQuery.refetch() : filesQuery.refetch())
-                }
+                onRetry={refetchList}
               />
             ) : (
               <PageTransition viewKey="folder">
@@ -1505,11 +1586,17 @@ export default function VaultBrowser(): React.JSX.Element {
                           : 'You can browse files in this folder.'
                     }
                   />
-                ) : isSearching && visibleFiles.length === 0 ? (
+                ) : (isSearching || isFolderFiltering) &&
+                  visibleFiles.length === 0 &&
+                  visibleFolders.length === 0 ? (
                   <EmptyState
                     icon={Search}
                     title="No matches"
-                    description={`Nothing in the vault is named like “${search.trim()}”.`}
+                    description={
+                      isSearching
+                        ? `Nothing in the vault is named like “${search.trim()}”.`
+                        : `No files in this folder start with “${folderFilterTerm}”.`
+                    }
                   />
                 ) : (
               <div>

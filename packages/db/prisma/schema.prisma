@@ -107,6 +107,10 @@ model File {
   @@index([categoryId])
   @@index([isDeleted])
   @@index([batchId])
+  /// Scoped folder search: equality on FolderId + prefix LIKE on DisplayName (no leading %).
+  @@index([folderId, displayName], map: "IX_Files_FolderId_DisplayName")
+  /// Module-scoped search: CategoryId (module) + FolderId + DisplayName prefix.
+  @@index([categoryId, folderId, displayName], map: "IX_Files_CategoryId_FolderId_DisplayName")
   @@map("Files")
 }
 

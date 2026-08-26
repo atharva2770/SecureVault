@@ -1,4 +1,4 @@
-import { ChevronRight, FileStack, Folder, FolderOpen, Lock } from 'lucide-react'
+import { ChevronRight, FileStack, Folder, FolderOpen, Lock, Search } from 'lucide-react'
 import type { FolderDto } from '@securevault/domain'
 
 import { ModuleBackdrop } from '@/components/ModuleBackdrop'
@@ -22,6 +22,8 @@ interface ModulePageProps {
   childCountById: Map<string, number>
   loading?: boolean
   denied?: boolean
+  folderFilter?: string
+  onFolderFilterChange?: (value: string) => void
   onOpenFolder: (folder: FolderDto) => void
   /** Name-verified retrieval on a leaf folder. */
   onPickFile: (folder: FolderDto) => void
@@ -36,6 +38,8 @@ export function ModulePage({
   childCountById,
   loading = false,
   denied = false,
+  folderFilter = '',
+  onFolderFilterChange,
   onOpenFolder,
   onPickFile
 }: ModulePageProps): React.JSX.Element {
@@ -109,6 +113,19 @@ export function ModulePage({
             {loading ? '…' : `${subfolders.length} sub-folder${subfolders.length === 1 ? '' : 's'}`}
           </span>
         </header>
+
+        {onFolderFilterChange ? (
+          <div className="relative mt-6 max-w-md">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-sv-text-muted" />
+            <input
+              value={folderFilter}
+              onChange={(e) => onFolderFilterChange(e.target.value)}
+              placeholder="Filter this folder…"
+              aria-label="Filter this folder"
+              className="h-11 w-full rounded-xl border border-sv-border bg-sv-bg pr-3 pl-10 text-sm text-sv-text outline-none placeholder:text-sv-text-muted focus:border-sv-accent focus:ring-2 focus:ring-sv-accent focus:ring-offset-2 focus:ring-offset-sv-bg"
+            />
+          </div>
+        ) : null}
 
         {loading ? (
           <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading folders">

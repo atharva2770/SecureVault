@@ -247,10 +247,19 @@ export interface MyAccessEntryDto {
   }
 }
 
+export interface FileSearchPageDto {
+  items: FileDto[]
+  total: number
+  nextCursor: string | null
+}
+
 export interface VaultSearchResults {
   modules: FolderDto[]
   folders: FolderDto[]
   files: FileDto[]
+  /** Total matching files (global FTS page). */
+  fileTotal?: number
+  nextCursor?: string | null
 }
 
 export interface AuditLogDto {

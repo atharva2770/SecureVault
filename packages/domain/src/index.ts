@@ -59,6 +59,7 @@ export type {
   UserFolderAccessDto,
   MyAccessEntryDto,
   VaultSearchResults,
+  FileSearchPageDto,
   AuditLogDto,
   AuditLogListDto
 } from './dto'

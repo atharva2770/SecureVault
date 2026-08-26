@@ -1,7 +1,6 @@
 /**
- * Escapes SQL LIKE / MSSQL pattern metacharacters so a user search string can
- * be passed to a parameterized `contains` / `LIKE` without acting as a wildcard.
- * Unused by the current client-side search; kept for a future server search endpoint.
+ * Escapes SQL LIKE / MSSQL pattern metacharacters so a user prefix can be
+ * passed to a parameterized `LIKE prefix%` without acting as a wildcard.
  */
 export function escapeLikePattern(input: string): string {
   return input.replace(/[[\]%_]/g, (ch) => `[${ch}]`)

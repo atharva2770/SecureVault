@@ -16,6 +16,12 @@ describe('classifyAuditAction', () => {
     expect(classifyAuditAction({ method: 'GET', url: '/api/search?q=invoice' }, 200)).toBe(
       AuditAction.SEARCH
     )
+    expect(
+      classifyAuditAction(
+        { method: 'GET', url: '/api/search/folder?folderId=abc&q=spec' },
+        200
+      )
+    ).toBe(AuditAction.SEARCH)
   })
 
   it('logs RETRIEVE vs DOWNLOAD from download intent', () => {

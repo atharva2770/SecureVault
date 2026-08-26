@@ -48,6 +48,7 @@ export function classifyAuditAction(request: AuditRequestShape, status: number):
   if (SKIP_PATHS.has(path)) return null
 
   if (path === '/api/search' && method === 'GET') return AuditAction.SEARCH
+  if (path === '/api/search/folder' && method === 'GET') return AuditAction.SEARCH
   if ((path === '/api/files' || path === '/api/folders' || path === '/api/categories') && method === 'GET') {
     return AuditAction.VIEW
   }

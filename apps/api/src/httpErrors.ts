@@ -19,7 +19,8 @@ const PUBLIC_BY_STATUS: Record<number, string> = {
   413: 'Request too large.',
   415: 'Unsupported content type.',
   429: 'Too many attempts. Please wait and try again.',
-  500: 'Something went wrong.'
+  500: 'Something went wrong.',
+  503: 'Search is unavailable.'
 }
 
 const PUBLIC_MESSAGES = new Set([
@@ -50,7 +51,7 @@ const PUBLIC_MESSAGES = new Set([
   'File not found.',
   'Category folder not found.',
   'Folder not found for this file type.',
-  'Invalid file type.',
+  'Search is unavailable.',
   'File type is not allowed.',
   'Empty files cannot be uploaded.',
   'Request too large.',
@@ -86,6 +87,7 @@ function statusFromMessage(message: string): number {
   if (lower === 'access denied.' || lower.includes('admin privileges') || lower.includes('only admins')) {
     return 403
   }
+  if (lower.includes('search is unavailable')) return 503
   if (lower.includes('too many')) return 429
   if (lower.includes('request too large') || lower.includes('payload too large')) return 413
   if (lower.includes('not found')) return 404
@@ -138,19 +140,24 @@ export function toPublicError(error: unknown): PublicError {
   const detail = error instanceof Error ? error.message : 'Unexpected error.'
   const statusCode = statusFromMessage(detail)
 
+  if (PUBLIC_MESSAGES.has(detail)) {
+    return { statusCode, clientMessage: detail, detail }
+  }
+
   if (statusCode >= 500 || looksInternal(detail)) {
+    const safeStatus = statusCode >= 500 ? statusCode : 500
     return {
-      statusCode: statusCode >= 500 ? statusCode : 500,
-      clientMessage: PUBLIC_BY_STATUS[500],
+      statusCode: safeStatus,
+      clientMessage: PUBLIC_BY_STATUS[safeStatus] ?? PUBLIC_BY_STATUS[500],
       detail
     }
   }
 
-  const clientMessage = PUBLIC_MESSAGES.has(detail)
-    ? detail
-    : (PUBLIC_BY_STATUS[statusCode] ?? PUBLIC_BY_STATUS[400])
-
-  return { statusCode, clientMessage, detail }
+  return {
+    statusCode,
+    clientMessage: PUBLIC_BY_STATUS[statusCode] ?? PUBLIC_BY_STATUS[400],
+    detail
+  }
 }
 
 export function toHttpError(error: unknown): HttpError {

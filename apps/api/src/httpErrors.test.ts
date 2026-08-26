@@ -43,9 +43,9 @@ describe('toPublicError', () => {
     expect(mapped.clientMessage).not.toMatch(/C:\\/)
   })
 
-  it('maps oversized uploads to a generic 413', () => {
-    const mapped = toPublicError(new Error('Request too large.'))
-    expect(mapped.statusCode).toBe(413)
-    expect(mapped.clientMessage).toBe('Request too large.')
+  it('maps full-text search outages to 503', () => {
+    const mapped = toPublicError(new Error('Search is unavailable.'))
+    expect(mapped.statusCode).toBe(503)
+    expect(mapped.clientMessage).toBe('Search is unavailable.')
   })
 })

@@ -12,8 +12,8 @@ export function normalizeSearchQuery(term: string): string {
 }
 
 /**
- * Rights-aware global search. The API records a SEARCH audit row and only
- * returns folders/files the caller can already view.
+ * Rights-aware global vault search (SQL Server full-text). Folder-scoped
+ * prefix search uses GET /api/search/folder instead — they do not share a path.
  */
 export async function searchVault(term: string): Promise<VaultSearchResults> {
   const q = normalizeSearchQuery(term)

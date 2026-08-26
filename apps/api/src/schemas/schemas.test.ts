@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { loginBodySchema } from './auth'
 import { createUserBodySchema, listAuditLogsQuerySchema } from './admin'
-import { listFilesQuerySchema, searchQuerySchema, uploadFieldsSchema } from './files'
+import { listFilesQuerySchema, searchQuerySchema, folderSearchQuerySchema, uploadFieldsSchema } from './files'
 import { createFolderBodySchema } from './folders'
 
 describe('request schemas', () => {
@@ -57,6 +57,21 @@ describe('request schemas', () => {
   it('rejects an oversized search query', () => {
     const result = searchQuerySchema.safeParse({ q: 'x'.repeat(201) })
     expect(result.success).toBe(false)
+  })
+
+  it('requires a uuid folderId on folder-scoped search', () => {
+    expect(folderSearchQuerySchema.safeParse({ q: 'spec' }).success).toBe(false)
+    expect(
+      folderSearchQuerySchema.safeParse({ folderId: 'not-a-uuid', q: 'spec' }).success
+    ).toBe(false)
+    expect(
+      folderSearchQuerySchema.safeParse({
+        folderId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        q: 'spec',
+        includeSubfolders: 'true',
+        limit: '25'
+      }).success
+    ).toBe(true)
   })
 
   it('rejects a non-uuid audit-log user filter', () => {

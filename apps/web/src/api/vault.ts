@@ -24,6 +24,7 @@ import type {
   RoleDto,
   UserFolderAccessDto,
   VaultSearchResults,
+  FileSearchPageDto,
   AuditLogListDto
 } from '@securevault/domain'
 
@@ -297,7 +298,25 @@ export const api = {
       return json<AuditLogListDto>(`/api/admin/audit-logs${qs ? `?${qs}` : ''}`)
     }
   },
-  search: (q: string) => json<VaultSearchResults>(`/api/search?${new URLSearchParams({ q })}`),
+  search: (q: string, opts?: { cursor?: string; limit?: number }) => {
+    const params = new URLSearchParams({ q })
+    if (opts?.cursor) params.set('cursor', opts.cursor)
+    if (opts?.limit) params.set('limit', String(opts.limit))
+    return json<VaultSearchResults>(`/api/search?${params}`)
+  },
+  searchFolder: (input: {
+    folderId: string
+    q: string
+    includeSubfolders?: boolean
+    cursor?: string
+    limit?: number
+  }) => {
+    const params = new URLSearchParams({ folderId: input.folderId, q: input.q })
+    if (input.includeSubfolders) params.set('includeSubfolders', 'true')
+    if (input.cursor) params.set('cursor', input.cursor)
+    if (input.limit) params.set('limit', String(input.limit))
+    return json<FileSearchPageDto>(`/api/search/folder?${params}`)
+  },
   ensureSidebar: () =>
     json<{ categories: FileCategoryDto[]; folders: FolderDto[] }>('/api/sidebar/ensure', {
       method: 'POST'

@@ -18,6 +18,7 @@ import {
   moveOrCopyBodySchema,
   renameFileBodySchema,
   searchQuerySchema,
+  folderSearchQuerySchema,
   uploadFieldsSchema
 } from '../schemas/files'
 
@@ -106,11 +107,35 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
   r.get('/api/search', { schema: { querystring: searchQuerySchema } }, async (request, reply) => {
     try {
       const session = requireSession(request)
-      return await listed.search(session.userId, request.query.q)
+      return await listed.searchGlobal(session.userId, {
+        q: request.query.q,
+        cursor: request.query.cursor,
+        limit: request.query.limit
+      })
     } catch (error) {
       return sendError(reply, error)
     }
   })
+
+  r.get(
+    '/api/search/folder',
+    { schema: { querystring: folderSearchQuerySchema } },
+    async (request, reply) => {
+      try {
+        const session = requireSession(request)
+        const include = request.query.includeSubfolders
+        return await listed.searchInFolder(session.userId, {
+          folderId: request.query.folderId,
+          q: request.query.q,
+          includeSubfolders: include === 'true' || include === '1',
+          cursor: request.query.cursor,
+          limit: request.query.limit
+        })
+      } catch (error) {
+        return sendError(reply, error)
+      }
+    }
+  )
 
   r.post(
     '/api/files',
