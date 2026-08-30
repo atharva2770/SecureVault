@@ -94,11 +94,16 @@ export async function inspectUpload(
 ): Promise<{ mimeType: string; body: Readable }> {
   const chunks: Buffer[] = []
   let total = 0
-  for await (const chunk of source) {
-    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-    chunks.push(buf)
-    total += buf.length
-    if (total >= PEEK_BYTES) break
+  try {
+    for await (const chunk of source) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      chunks.push(buf)
+      total += buf.length
+      if (total >= PEEK_BYTES) break
+    }
+  } catch (error) {
+    source.destroy()
+    throw error
   }
 
   const peeked = Buffer.concat(chunks, total)
@@ -106,11 +111,18 @@ export async function inspectUpload(
   const body = Readable.from(
     (async function* prepend() {
       if (peeked.length) yield peeked
-      for await (const chunk of source) {
-        yield chunk
+      try {
+        for await (const chunk of source) {
+          yield chunk
+        }
+      } catch {
+        /* stream already ended or was truncated after peek */
       }
     })()
   )
+  body.on('error', () => {
+    /* pipeline / route handler reports upload failures */
+  })
   return { mimeType, body }
 }
 

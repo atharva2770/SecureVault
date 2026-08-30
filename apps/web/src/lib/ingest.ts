@@ -1,6 +1,7 @@
 import type { FileDto, FolderDto } from '@securevault/domain'
 
 export const STAGED_ID_PREFIX = 'stg:'
+export const INGEST_UPLOAD_CONCURRENCY = 3
 
 export interface StagedFile {
   localId: string
@@ -9,7 +10,7 @@ export interface StagedFile {
   displayName: string
   folderId: string
   addedAt: string
-  status: 'ready' | 'locking' | 'error'
+  status: 'encrypting' | 'error'
   error?: string
 }
 

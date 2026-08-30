@@ -178,8 +178,8 @@ export function ModulePage({
                   Paste{pasteCount ? ` (${pasteCount})` : ''}
                 </Button>
                 <p className="text-xs text-sv-text-muted">
-                  Drop files here, then paste them into the right subfolder. Lock the cycle when the
-                  set is complete.
+                  Drop files here. Each one encrypts immediately. Cut and paste locked files into
+                  subfolders, then Done.
                 </p>
               </>
             ) : (
@@ -189,8 +189,8 @@ export function ModulePage({
                   Manage files
                 </Button>
                 <p className="text-xs text-sv-text-muted">
-                  Open a subfolder to retrieve a file by name, or start an ingest session to add and
-                  sort files before locking.
+                  Open a subfolder to retrieve a file by name, or start managing files to add and
+                  sort them.
                 </p>
               </>
             )}
@@ -244,7 +244,7 @@ export function ModulePage({
                           : isAdmin
                             ? ingestActive
                               ? 'Open folder · add, cut & paste files'
-                              : 'Retrieve by name, or start an ingest session'
+                              : 'Retrieve by name, or manage files'
                             : 'Retrieve a file by name'}
                       </span>
                     </span>

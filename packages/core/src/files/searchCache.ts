@@ -47,7 +47,7 @@ export class SearchCache {
   }
 
   getScoped(key: ScopedSearchCacheKey): FileSearchPageDto | undefined {
-    return this.get(scopedKey(key)) as FileSearchPageDto | undefined
+    return this.get(scopedKey(key), key.userId) as FileSearchPageDto | undefined
   }
 
   setScoped(key: ScopedSearchCacheKey, value: FileSearchPageDto): void {
@@ -55,7 +55,7 @@ export class SearchCache {
   }
 
   getGlobal(key: GlobalSearchCacheKey): VaultSearchResults | undefined {
-    return this.get(globalKey(key)) as VaultSearchResults | undefined
+    return this.get(globalKey(key), key.userId) as VaultSearchResults | undefined
   }
 
   setGlobal(key: GlobalSearchCacheKey, value: VaultSearchResults): void {
@@ -91,19 +91,24 @@ export class SearchCache {
     return this.entries.size
   }
 
-  private get(key: string): unknown | undefined {
+  private get(key: string, userId: string): unknown | undefined {
     const entry = this.entries.get(key)
     if (!entry) return undefined
+    if (entry.userId !== userId) {
+      this.deleteKey(key)
+      return undefined
+    }
     if (entry.expiresAt <= this.now()) {
       this.deleteKey(key)
       return undefined
     }
     this.entries.delete(key)
     this.entries.set(key, entry)
-    return entry.value
+    return clone(entry.value)
   }
 
   private set(key: string, userId: string, value: unknown): void {
+    if (!userId.trim()) return
     if (this.entries.has(key)) this.deleteKey(key)
     while (this.entries.size >= this.maxEntries) {
       const oldest = this.entries.keys().next().value

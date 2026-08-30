@@ -48,7 +48,17 @@ describe('SearchCache', () => {
     const page: FileSearchPageDto = { items: [], total: 3, nextCursor: null }
     cache.setScoped(scoped('alice'), page)
     page.total = 99
+    const hit = cache.getScoped(scoped('alice'))
+    expect(hit?.total).toBe(3)
+    if (hit) hit.total = 99
     expect(cache.getScoped(scoped('alice'))?.total).toBe(3)
+  })
+
+  it('refuses to cache or serve a page without a userId', () => {
+    const cache = new SearchCache()
+    cache.setScoped(scoped(''), emptyPage)
+    expect(cache.size).toBe(0)
+    expect(cache.getScoped(scoped(''))).toBeUndefined()
   })
 
   it('never serves user A a page stored for user B', () => {
@@ -118,6 +128,14 @@ describe('SearchCache', () => {
     cache.setScoped(scoped('alice'), emptyPage)
     cache.setGlobal(global('bob'), emptyGlobal)
     AccessControlService.getInstance().invalidateAll()
+    expect(cache.size).toBe(0)
+  })
+
+  it('ACL invalidateFolder drops cached search pages', () => {
+    const cache = resetSearchCache(new SearchCache())
+    cache.setScoped(scoped('alice', 'folder-a'), emptyPage)
+    cache.setGlobal(global('bob'), emptyGlobal)
+    AccessControlService.getInstance().invalidateFolder('folder-a')
     expect(cache.size).toBe(0)
   })
 })

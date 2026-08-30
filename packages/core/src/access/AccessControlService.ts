@@ -86,6 +86,7 @@ export class AccessControlService {
 
   invalidateFolder(_folderId: string): void {
     this.rightsCache.clear()
+    getSearchCache().invalidateOnFileMutation(_folderId)
   }
 
   invalidateAll(): void {

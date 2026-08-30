@@ -48,8 +48,8 @@ async function drainStream(stream: Readable): Promise<void> {
 
 /**
  * Collect multipart text fields and the file part.
- * Fields after the file are only visible once the file is consumed, so if
- * folderId/displayName are missing when the file arrives we buffer it.
+ * The file is always buffered so the multipart iterator can finish cleanly
+ * (breaking early leaves the file stream aborted and crashes the API).
  */
 async function readMultipartUpload(request: FastifyRequest): Promise<{
   uploaded: MultipartFile
@@ -58,7 +58,7 @@ async function readMultipartUpload(request: FastifyRequest): Promise<{
 }> {
   const fields: Record<string, string> = {}
   let uploaded: MultipartFile | undefined
-  let buffered: Buffer | undefined
+  let fileBuffer: Buffer | undefined
 
   for await (const part of request.parts()) {
     if (part.type === 'file') {
@@ -67,24 +67,24 @@ async function readMultipartUpload(request: FastifyRequest): Promise<{
         continue
       }
       uploaded = part
-      const haveMeta = Boolean(fields.displayName?.trim() && fields.folderId?.trim())
-      if (!haveMeta) {
-        buffered = await part.toBuffer()
-      } else {
-        break
-      }
+      fileBuffer = await part.toBuffer()
     } else {
       fields[part.fieldname] = String(part.value ?? '')
     }
   }
 
-  if (!uploaded) {
+  if (!uploaded || !fileBuffer) {
     throw new HttpError(400, 'A file part named "file" is required.')
   }
 
+  const body = Readable.from(fileBuffer)
+  body.on('error', () => {
+    /* absorbed — handler below maps failures to HTTP errors */
+  })
+
   return {
     uploaded,
-    body: buffered ? Readable.from(buffered) : uploaded.file,
+    body,
     fields
   }
 }

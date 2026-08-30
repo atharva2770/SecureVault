@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { PasswordPolicyError } from '@securevault/core'
+import { PasswordPolicyError, UnsupportedUploadTypeError, UploadTooLargeError } from '@securevault/core'
 
 export class HttpError extends Error {
   readonly statusCode: number
@@ -84,6 +84,12 @@ function looksInternal(message: string): boolean {
   )
 }
 
+function isAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as NodeJS.ErrnoException).code
+  return error.name === 'AbortError' || code === 'ABORT_ERR'
+}
+
 function statusFromMessage(message: string): number {
   const lower = message.toLowerCase()
   if (lower === 'access denied.' || lower.includes('admin privileges') || lower.includes('only admins')) {
@@ -137,6 +143,22 @@ export function toPublicError(error: unknown): PublicError {
 
   if (error instanceof PasswordPolicyError) {
     return { statusCode: 400, clientMessage: error.message, detail: error.message }
+  }
+
+  if (error instanceof UnsupportedUploadTypeError) {
+    return { statusCode: 400, clientMessage: error.message, detail: error.message }
+  }
+
+  if (error instanceof UploadTooLargeError) {
+    return { statusCode: 413, clientMessage: error.message, detail: error.message }
+  }
+
+  if (isAbortError(error)) {
+    return {
+      statusCode: 400,
+      clientMessage: 'Upload was interrupted. Try again.',
+      detail: error instanceof Error ? error.message : 'Upload aborted.'
+    }
   }
 
   const detail = error instanceof Error ? error.message : 'Unexpected error.'

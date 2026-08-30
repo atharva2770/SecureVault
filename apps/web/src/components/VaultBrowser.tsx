@@ -64,6 +64,7 @@ import { cn } from '@/lib/utils'
 import {
   displayNameFromFile,
   downloadLocalFile,
+  INGEST_UPLOAD_CONCURRENCY,
   isStagedId,
   namesTakenInFolder,
   newStagedId,
@@ -351,9 +352,8 @@ export default function VaultBrowser(): React.JSX.Element {
   const [status, setStatus] = useState<string | null>(null)
   const [ingestActive, setIngestActive] = useState(false)
   const [staged, setStaged] = useState<StagedFile[]>([])
-  const [locking, setLocking] = useState(false)
-  const [lockCurrent, setLockCurrent] = useState(0)
-  const [lockTotal, setLockTotal] = useState(0)
+  const uploadWait = useRef<StagedFile[]>([])
+  const uploadInflight = useRef(0)
   const [passwordTarget, setPasswordTarget] = useState<{
     file: FileDto
     mode: 'open' | 'download'
@@ -712,6 +712,8 @@ export default function VaultBrowser(): React.JSX.Element {
   const canCreateSubfolder =
     selection.type === 'folder' && Boolean(selectedFolder?.categoryId) && here.newFolder
   const managing = isAdmin && ingestActive
+  const encryptingCount = staged.filter((s) => s.status === 'encrypting').length
+  const ingestErrorCount = staged.filter((s) => s.status === 'error').length
   const canUploadHere = managing
   const canPasteHere =
     managing && selection.type === 'folder' && Boolean(clipboard?.items.length)
@@ -725,6 +727,12 @@ export default function VaultBrowser(): React.JSX.Element {
   function selectedFilesHave(flag: 'copy' | 'cut' | 'delete' | 'rename'): boolean {
     if (!selectedFileIds.length) return false
     if ((flag === 'cut' || flag === 'copy') && !managing) return false
+    if (
+      (flag === 'cut' || flag === 'copy') &&
+      selectedFileIds.some((id) => staged.find((s) => s.localId === id)?.status === 'encrypting')
+    ) {
+      return false
+    }
     if (managing && (flag === 'cut' || flag === 'copy' || flag === 'delete' || flag === 'rename')) {
       return selectedFileIds.every((id) => Boolean(fileById.get(id)))
     }
@@ -858,24 +866,32 @@ export default function VaultBrowser(): React.JSX.Element {
       return
     }
 
-    const stagedIds = clipboard.items.map((i) => i.fileId).filter(isStagedId)
+    const stagedIds = clipboard.items
+      .map((i) => i.fileId)
+      .filter((id) => {
+        if (!isStagedId(id)) return false
+        return staged.find((s) => s.localId === id)?.status !== 'encrypting'
+      })
     const vaultIds = clipboard.items.map((i) => i.fileId).filter((id) => !isStagedId(id))
 
     if (stagedIds.length) {
+      const clonesToEncrypt: StagedFile[] = []
       setStaged((prev) => {
         if (clipboard.mode === 'copy') {
           const clones = prev
             .filter((s) => stagedIds.includes(s.localId))
             .map((s) => {
               const taken = namesTakenInFolder(targetFolderId, prev, filesQuery.data ?? [])
-              return {
+              const clone: StagedFile = {
                 ...s,
                 localId: newStagedId(),
                 folderId: targetFolderId,
                 displayName: uniqueDisplayName(s.displayName, taken),
-                status: 'ready' as const,
+                status: 'encrypting',
                 error: undefined
               }
+              clonesToEncrypt.push(clone)
+              return clone
             })
           return [...prev, ...clones]
         }
@@ -883,6 +899,10 @@ export default function VaultBrowser(): React.JSX.Element {
           stagedIds.includes(s.localId) ? { ...s, folderId: targetFolderId } : s
         )
       })
+      if (clipboard.mode === 'copy') {
+        for (const clone of clonesToEncrypt) uploadWait.current.push(clone)
+        pumpUploads()
+      }
     }
 
     if (vaultIds.length) {
@@ -925,7 +945,13 @@ export default function VaultBrowser(): React.JSX.Element {
 
   function deleteSelectedFiles(fileIds = selectedFileIds): void {
     if (!fileIds.length) return
-    const stagedIds = fileIds.filter(isStagedId)
+    const encryptingIds = fileIds.filter(
+      (id) => staged.find((s) => s.localId === id)?.status === 'encrypting'
+    )
+    if (encryptingIds.length) {
+      setStatus('Wait until files finish encrypting before removing them.')
+    }
+    const stagedIds = fileIds.filter((id) => isStagedId(id) && !encryptingIds.includes(id))
     const vaultIds = fileIds.filter((id) => !isStagedId(id))
 
     if (stagedIds.length) {
@@ -933,8 +959,8 @@ export default function VaultBrowser(): React.JSX.Element {
       setSelectedFileIds((prev) => prev.filter((id) => !stagedIds.includes(id)))
       setStatus(
         stagedIds.length === 1
-          ? 'Removed from ingest (was not locked yet).'
-          : `Removed ${stagedIds.length} staged files.`
+          ? 'Removed a file that failed to lock.'
+          : `Removed ${stagedIds.length} files that failed to lock.`
       )
     }
 
@@ -1018,27 +1044,84 @@ export default function VaultBrowser(): React.JSX.Element {
     const list = files instanceof FileList ? Array.from(files) : (files ?? [])
     if (!list.length) return
     const folderId = selection.folderId
-    setStaged((prev) => {
-      const next = [...prev]
-      for (const file of list) {
-        const taken = namesTakenInFolder(folderId, next, filesQuery.data ?? [])
-        next.push({
-          localId: newStagedId(),
-          file,
-          originalName: file.name,
-          displayName: uniqueDisplayName(displayNameFromFile(file.name), taken),
-          folderId,
-          addedAt: new Date().toISOString(),
-          status: 'ready'
-        })
+    const jobs: StagedFile[] = []
+    let working = [...staged]
+    for (const file of list) {
+      const taken = namesTakenInFolder(folderId, working, filesQuery.data ?? [])
+      const job: StagedFile = {
+        localId: newStagedId(),
+        file,
+        originalName: file.name,
+        displayName: uniqueDisplayName(displayNameFromFile(file.name), taken),
+        folderId,
+        addedAt: new Date().toISOString(),
+        status: 'encrypting'
       }
-      return next
-    })
+      working.push(job)
+      jobs.push(job)
+    }
+    setStaged(working)
+    for (const job of jobs) uploadWait.current.push(job)
+    pumpUploads()
     setStatus(
       list.length === 1
-        ? 'File staged. Sort it, then Lock & finish to encrypt.'
-        : `Staged ${list.length} files. Sort them, then Lock & finish to encrypt.`
+        ? 'Encrypting file now…'
+        : `Encrypting ${list.length} files now. They lock as they land.`
     )
+  }
+
+  function pumpUploads(): void {
+    while (uploadInflight.current < INGEST_UPLOAD_CONCURRENCY && uploadWait.current.length) {
+      const job = uploadWait.current.shift()
+      if (!job) break
+      uploadInflight.current += 1
+      void encryptOne(job).finally(() => {
+        uploadInflight.current -= 1
+        pumpUploads()
+      })
+    }
+  }
+
+  async function encryptOne(job: StagedFile): Promise<void> {
+    const folder = folders.find((f) => f.folderId === job.folderId)
+    try {
+      await api.addFile({
+        file: job.file,
+        displayName: job.displayName,
+        categoryId: folder?.categoryId ?? '',
+        folderId: job.folderId
+      })
+      setStaged((prev) => prev.filter((s) => s.localId !== job.localId))
+      await queryClient.invalidateQueries({ queryKey: ['files'] })
+      await queryClient.invalidateQueries({ queryKey: ['search'] })
+      void api.auth.touch()
+    } catch (err) {
+      setStaged((prev) =>
+        prev.map((s) =>
+          s.localId === job.localId
+            ? {
+                ...s,
+                status: 'error',
+                error: err instanceof Error ? err.message : 'Could not lock this file.'
+              }
+            : s
+        )
+      )
+    }
+  }
+
+  function retryFailedIngest(localId: string, displayName?: string): void {
+    const job = staged.find((s) => s.localId === localId && s.status === 'error')
+    if (!job) return
+    const next: StagedFile = {
+      ...job,
+      displayName: displayName ?? job.displayName,
+      status: 'encrypting',
+      error: undefined
+    }
+    setStaged((prev) => prev.map((s) => (s.localId === localId ? next : s)))
+    uploadWait.current.push(next)
+    pumpUploads()
   }
 
   function handleFileInput(files: FileList | null): void {
@@ -1055,74 +1138,30 @@ export default function VaultBrowser(): React.JSX.Element {
   }
 
   function finishIngest(message?: string): void {
+    uploadWait.current = []
     setStaged([])
     setIngestActive(false)
     setClipboard(null)
     setSelectedFileIds([])
-    setStatus(message ?? 'Cycle locked. Files are encrypted in the vault.')
+    setStatus(message ?? 'Back at modules.')
     navigateTo({ type: 'root' })
     void queryClient.invalidateQueries({ queryKey: ['files'] })
     void queryClient.invalidateQueries({ queryKey: ['search'] })
     void queryClient.invalidateQueries({ queryKey: ['sidebar'] })
   }
 
-  function discardIngest(): void {
-    if (locking) return
-    if (staged.length) {
+  function finishSession(): void {
+    if (encryptingCount > 0) {
+      setStatus('Wait for files to finish encrypting, then click Done.')
+      return
+    }
+    if (ingestErrorCount > 0) {
       const ok = window.confirm(
-        `Discard ${staged.length} file${staged.length === 1 ? '' : 's'} that are not yet locked?`
+        `${ingestErrorCount} file${ingestErrorCount === 1 ? '' : 's'} failed to lock and will be discarded. Leave anyway?`
       )
       if (!ok) return
     }
-    finishIngest('Ingest discarded. Nothing new was locked.')
-  }
-
-  async function lockAndFinish(): Promise<void> {
-    if (!isAdmin || locking) return
-    const items = staged.filter((s) => s.status !== 'locking')
-    if (!items.length) {
-      finishIngest('Ingest closed. No new files to lock.')
-      return
-    }
-    setLocking(true)
-    setLockTotal(items.length)
-    setLockCurrent(0)
-    const failed: StagedFile[] = []
-    let done = 0
-    for (const item of items) {
-      const folder = folders.find((f) => f.folderId === item.folderId)
-      try {
-        await api.addFile({
-          file: item.file,
-          displayName: item.displayName,
-          categoryId: folder?.categoryId ?? '',
-          folderId: item.folderId
-        })
-      } catch (err) {
-        failed.push({
-          ...item,
-          status: 'error',
-          error: err instanceof Error ? err.message : 'Lock failed.'
-        })
-      }
-      done += 1
-      setLockCurrent(done)
-    }
-    setLocking(false)
-    if (failed.length) {
-      setStaged(failed)
-      setStatus(
-        failed.length === 1
-          ? `Could not lock “${failed[0].displayName}”: ${failed[0].error}`
-          : `${failed.length} files could not be locked. Fix them and try again.`
-      )
-      return
-    }
-    finishIngest(
-      items.length === 1
-        ? 'File encrypted and locked. Back at modules.'
-        : `${items.length} files encrypted and locked. Back at modules.`
-    )
+    finishIngest('Back at modules. Added files are already locked.')
   }
 
   async function moveFileToFolder(fileId: string, targetFolderId: string): Promise<void> {
@@ -1136,6 +1175,11 @@ export default function VaultBrowser(): React.JSX.Element {
       return
     }
     if (isStagedId(fileId)) {
+      const job = staged.find((s) => s.localId === fileId)
+      if (job?.status === 'encrypting') {
+        setStatus('Wait until this file is locked, then move it.')
+        return
+      }
       setStaged((prev) =>
         prev.map((s) => (s.localId === fileId ? { ...s, folderId: targetFolderId } : s))
       )
@@ -1162,7 +1206,7 @@ export default function VaultBrowser(): React.JSX.Element {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (isTypingTarget(event.target)) return
-      if (passwordTarget || locking || moveTarget || renameTarget) return
+      if (passwordTarget || moveTarget || renameTarget) return
 
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
@@ -1223,7 +1267,6 @@ export default function VaultBrowser(): React.JSX.Element {
     selection,
     visibleFiles,
     passwordTarget,
-    locking,
     moveTarget,
     renameTarget
   ])
@@ -1375,13 +1418,10 @@ export default function VaultBrowser(): React.JSX.Element {
       ) : null}
       {managing ? (
         <IngestSessionBar
-          pendingCount={staged.length}
-          locking={locking}
-          lockCurrent={lockCurrent}
-          lockTotal={lockTotal}
+          encryptingCount={encryptingCount}
+          errorCount={ingestErrorCount}
           onAdd={() => uploadInputRef.current?.click()}
-          onLock={() => void lockAndFinish()}
-          onDiscard={discardIngest}
+          onDone={finishSession}
         />
       ) : null}
       {isImmersive ? (
@@ -1795,7 +1835,7 @@ export default function VaultBrowser(): React.JSX.Element {
                     title="This folder is empty"
                     description={
                       managing
-                        ? 'Add files here, then cut and paste them into the right folders. Lock & finish encrypts the whole set.'
+                        ? 'Add files here — each one encrypts as it lands. Then cut and paste into the right folders. Done returns to modules.'
                         : here.copy
                           ? 'You can open and download files in this folder.'
                           : 'You can browse files in this folder.'
@@ -1965,7 +2005,7 @@ export default function VaultBrowser(): React.JSX.Element {
                         <div
                           role="button"
                           tabIndex={0}
-                          draggable={managing}
+                          draggable={managing && stagedItem?.status !== 'encrypting'}
                           className={cn(
                             'flex cursor-default items-center gap-3 rounded-xl border border-sv-border/70 bg-sv-surface/60 px-3 py-3 transition md:grid md:grid-cols-[minmax(180px,2fr)_150px_120px_80px_180px] md:gap-2 md:rounded-none md:border-0 md:border-b md:border-sv-border/60 md:bg-transparent md:px-4 md:py-2',
                             selected && 'border-sv-accent/50 bg-sv-accent/10 md:bg-sv-accent/10',
@@ -2004,8 +2044,11 @@ export default function VaultBrowser(): React.JSX.Element {
                                   <HighlightMatch text={file.displayName} query={highlightQuery} />
                                 </span>
                                 {pending ? (
-                                  <Badge variant="warning" size="sm">
-                                    {stagedItem?.status === 'error' ? 'Lock failed' : 'Not locked'}
+                                  <Badge
+                                    variant={stagedItem?.status === 'error' ? 'danger' : 'warning'}
+                                    size="sm"
+                                  >
+                                    {stagedItem?.status === 'error' ? 'Failed' : 'Encrypting'}
                                   </Badge>
                                 ) : null}
                               </p>
@@ -2023,7 +2066,7 @@ export default function VaultBrowser(): React.JSX.Element {
                             </div>
                           </div>
                           <span className="hidden truncate text-sm text-sv-text-muted md:block">
-                            {pending ? 'In ingest' : formatDate(file.updatedAt)}
+                            {pending ? (stagedItem?.status === 'error' ? 'Failed' : 'Encrypting') : formatDate(file.updatedAt)}
                           </span>
                           <span className="hidden truncate text-sm text-sv-text-muted md:block">
                             {fileTypeLabel(file)}
@@ -2071,7 +2114,7 @@ export default function VaultBrowser(): React.JSX.Element {
                                 <Download className="size-3.5" />
                               </Button>
                             ) : null}
-                            {managing ? (
+                            {managing && stagedItem?.status !== 'encrypting' ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -2085,7 +2128,19 @@ export default function VaultBrowser(): React.JSX.Element {
                                 <MoveRight className="size-3.5" />
                               </Button>
                             ) : null}
-                            {managing || acts.rename ? (
+                            {stagedItem?.status === 'error' ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-2 text-xs md:h-7"
+                                title="Retry encrypt"
+                                onClick={() => retryFailedIngest(stagedItem.localId)}
+                              >
+                                Retry
+                              </Button>
+                            ) : null}
+                            {(!stagedItem || stagedItem.status !== 'encrypting') &&
+                            (managing || acts.rename) ? (
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -2219,11 +2274,7 @@ export default function VaultBrowser(): React.JSX.Element {
           }}
           onConfirm={(displayName) => {
             if (isStagedId(renameTarget.fileId)) {
-              setStaged((prev) =>
-                prev.map((s) =>
-                  s.localId === renameTarget.fileId ? { ...s, displayName, status: 'ready', error: undefined } : s
-                )
-              )
+              retryFailedIngest(renameTarget.fileId, displayName)
               setRenameTarget(null)
               setRenameError(null)
               return

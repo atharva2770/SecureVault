@@ -43,7 +43,7 @@ Cache hits still write a `SEARCH` audit row (the user searched). Errors are neve
 | --- | --- |
 | File add / rename / delete / move / copy | Entire search cache (`invalidateOnFileMutation`) — covers that folder's prefix pages, ancestor `includeSubfolders` pages, and every user's global FTS page |
 | Rights change for one user (`AccessControlService.invalidateUser`) | That user's scoped + global pages only |
-| Role ACL / `invalidateAll` | Entire search cache |
+| Folder ACL (`invalidateFolder`) or role ACL / `invalidateAll` | Entire search cache |
 
 `RbacService` and `AdminService` already call `invalidateUser` / `invalidateAll`; those now also drop search pages. File mutations are hooked in `VaultFileService`.
 
