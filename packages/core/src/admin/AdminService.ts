@@ -232,7 +232,7 @@ export class AdminService {
     await this.requireAdminOrManager(actorUserId, true)
     const folders = await this.db.prisma.folder.findMany({
       where: { isDeleted: false },
-      orderBy: [{ isCategoryRoot: 'desc' }, { name: 'asc' }]
+      orderBy: [{ isCategoryRoot: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }]
     })
 
     // Admin sees all folders; attach full rights for DTO shape
@@ -243,6 +243,9 @@ export class AdminService {
       name: f.name,
       isCategoryRoot: f.isCategoryRoot,
       createdAt: f.createdAt.toISOString(),
+      sortOrder: f.sortOrder,
+      childFolderCount: 0,
+      fileCount: 0,
       rights: { view: true, edit: true, copy: true, delete: true }
     }))
   }

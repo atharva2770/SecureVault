@@ -17,7 +17,6 @@ export function folderRightsOf(
 export function vaultActions(rights: FolderRights) {
   return {
     view: rights.view,
-    download: rights.copy,
     copy: rights.copy,
     rename: rights.edit,
     move: rights.edit,

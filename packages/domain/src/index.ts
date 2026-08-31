@@ -26,7 +26,8 @@ export {
 } from './folder-grant'
 
 export { DEFAULT_VAULT_FOLDER_TREE } from './default-folders'
-export type { DefaultFolderTreeNode } from './default-folders'
+export type { DefaultFolderTreeNode, DefaultFolderChild } from './default-folders'
+export { compareFoldersByOrder, formatContentCounts } from './folder-order'
 
 export type {
   AuthUserDto,

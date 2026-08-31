@@ -74,7 +74,8 @@ const PUBLIC_MESSAGES = new Set([
   'A category with this code already exists.',
   'Category name must be between 1 and 100 characters.',
   'Category code is invalid.',
-  'Subfolders must be created under a file category.'
+  'Subfolders must be created under a file category.',
+  'Downloads are disabled.'
 ])
 
 function looksInternal(message: string): boolean {

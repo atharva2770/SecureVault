@@ -89,10 +89,10 @@ async function readMultipartUpload(request: FastifyRequest): Promise<{
   }
 }
 
-function contentDisposition(fileName: string): string {
+function contentDisposition(fileName: string, kind: 'inline' | 'attachment'): string {
   const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_')
   const encoded = encodeURIComponent(fileName)
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encoded}`
 }
 
 /** Content types that a browser may execute/script if rendered inline. */
@@ -234,15 +234,20 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
       const { fileId } = request.params
       const { password, intent } = request.body
 
+      if (intent === 'download' || intent === 'copy') {
+        throw new HttpError(403, 'Downloads are disabled.')
+      }
+
       const downloaded = await vault.downloadToTemp(session.userId, fileId, password, {
         kek: session.kek,
-        intent: intent === 'download' || intent === 'copy' ? 'copy' : 'view'
+        intent: 'view'
       })
       tempPath = downloaded.tempPath
       const name = downloadFileName(downloaded.displayName, downloaded.originalFileName)
 
       reply.header('Content-Type', safeResponseContentType(downloaded.mimeType))
-      reply.header('Content-Disposition', contentDisposition(name))
+      reply.header('Content-Disposition', contentDisposition(name, 'inline'))
+      reply.header('Cache-Control', 'no-store')
       reply.header('X-Checksum-SHA256', downloaded.checksum)
       reply.header('X-Content-Type-Options', 'nosniff')
       reply.header('Content-Security-Policy', "default-src 'none'; sandbox")

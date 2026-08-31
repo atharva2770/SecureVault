@@ -13,6 +13,7 @@ import { MODULE_DISPLAY_ORDER, moduleThemeForCategory } from '@/theme/modules'
 export interface ModuleGridItem {
   folder: FolderDto
   folderCount: number
+  fileCount: number
   /** Current user can't actually enter this module (view=false / traverse-only). */
   restricted: boolean
 }
@@ -66,7 +67,7 @@ export function ModuleGrid({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sv-text-muted">
             My vault
           </p>
-          <h1 className="mt-2 font-display text-3xl font-extrabold sm:text-4xl">Main folders</h1>
+          <h1 className="mt-2 font-display text-4xl font-extrabold sm:text-5xl">Main folders</h1>
           <p className="mt-2 max-w-2xl text-sm text-sv-text-muted">
             {loading
               ? 'Loading modules available to your account.'
@@ -99,7 +100,7 @@ export function ModuleGrid({
         />
       ) : (
         <ul className={`mt-8 ${MODULE_GRID}`}>
-          {visible.map(({ folder, folderCount, restricted }) => {
+          {visible.map(({ folder, folderCount, fileCount, restricted }) => {
             const theme = moduleThemeForCategory(folder.name)
             const locked = restricted && isAdmin
             return (
@@ -110,6 +111,7 @@ export function ModuleGrid({
                   tagline={theme.tagline}
                   colorVar={theme.colorVar}
                   folderCount={folderCount}
+                  fileCount={fileCount}
                   restricted={locked}
                   locked={locked}
                   onOpen={locked ? undefined : () => onOpen(folder)}

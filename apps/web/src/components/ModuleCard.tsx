@@ -1,4 +1,5 @@
 import { ArrowUpRight, FolderClosed, Lock } from 'lucide-react'
+import { formatContentCounts } from '@securevault/domain'
 
 import { moduleIcon } from '@/components/module-icons'
 import { cn } from '@/lib/utils'
@@ -10,6 +11,7 @@ export interface ModuleCardProps {
   /** CSS var reference for this module's accent, e.g. 'var(--mod-hr)'. */
   colorVar: string
   folderCount: number
+  fileCount: number
   /** Blurred, non-clickable overlay (admin awareness of a restricted module). */
   locked?: boolean
   /** Show the "Restricted" pill (admins only). */
@@ -23,6 +25,7 @@ export function ModuleCard({
   tagline,
   colorVar,
   folderCount,
+  fileCount,
   locked = false,
   restricted = false,
   onOpen
@@ -67,11 +70,14 @@ export function ModuleCard({
           <ArrowUpRight className="h-5 w-5 text-sv-text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-mod" />
         )}
       </div>
-      <h2 className="mt-5 font-display text-xl font-bold">{label}</h2>
+      <h2 className="mt-5 font-display text-2xl font-bold leading-snug break-words sm:text-3xl">{label}</h2>
       {tagline ? <p className="mt-1 text-sm text-sv-text-muted">{tagline}</p> : null}
+      <p className="mt-2 text-xs font-medium text-sv-text">
+        Enter the exact file name to view the file.
+      </p>
       <div className="mt-6 flex items-center gap-2 text-xs font-semibold text-mod">
         <FolderClosed className="h-4 w-4" />
-        {folderCount} sub-folder{folderCount === 1 ? '' : 's'}
+        {formatContentCounts(fileCount, folderCount, 'sub-folder')}
       </div>
 
       {locked ? (

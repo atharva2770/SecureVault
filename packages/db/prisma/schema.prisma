@@ -53,6 +53,8 @@ model Folder {
   name           String   @map("Name") @db.NVarChar(255)
   /// True for auto-created category root folders (not user-deletable).
   isCategoryRoot Boolean  @default(false) @map("IsCategoryRoot")
+  /// Display sequence among siblings (lower first).
+  sortOrder      Int      @default(0) @map("SortOrder")
   createdAt      DateTime @default(now()) @map("CreatedAt") @db.DateTime2
   isDeleted      Boolean  @default(false) @map("IsDeleted")
 

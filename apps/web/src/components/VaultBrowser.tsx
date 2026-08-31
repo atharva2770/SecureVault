@@ -7,7 +7,6 @@ import {
   ChevronRight,
   ClipboardPaste,
   Copy,
-  Download,
   Eye,
   File,
   FileArchive,
@@ -33,10 +32,12 @@ import {
 } from 'lucide-react'
 
 import type { FileDto, FolderDto } from '@securevault/domain'
-import { EMPTY_RIGHTS } from '@securevault/domain'
+import { compareFoldersByOrder, EMPTY_RIGHTS } from '@securevault/domain'
 import { api } from '@/api/vault'
+import type { OpenedFileView } from '@/api/vault'
 import { useAuth } from '@/auth/AuthProvider'
 import FileNameModal from '@/components/FileNameModal'
+import SecureFileViewer from '@/components/SecureFileViewer'
 import ModuleGrid, { type ModuleGridItem } from '@/components/ModuleGrid'
 import ModulePage from '@/components/ModulePage'
 import { PageTransition } from '@/components/PageTransition'
@@ -63,12 +64,10 @@ import {
 import { cn } from '@/lib/utils'
 import {
   displayNameFromFile,
-  downloadLocalFile,
   INGEST_UPLOAD_CONCURRENCY,
   isStagedId,
   namesTakenInFolder,
   newStagedId,
-  previewLocalFile,
   stagedToFileDto,
   uniqueDisplayName,
   type StagedFile
@@ -102,6 +101,21 @@ function slugifyName(name: string): string {
   return slug || 'folder'
 }
 
+/** Old slugs after department / subfolder renames — first path segment and later segments. */
+const FOLDER_SLUG_ALIASES: Record<string, string> = {
+  engg: 'engineering',
+  'customer-drawings': 'customer-drawing',
+  'process-sheets': 'process-sheet',
+  'gauge-poka': 'gauges-poka'
+}
+
+function slugEquals(folderName: string, segment: string): boolean {
+  const slug = slugifyName(folderName)
+  if (slug === segment) return true
+  const canonical = FOLDER_SLUG_ALIASES[segment]
+  return Boolean(canonical && slug === canonical)
+}
+
 function parsePathSegments(routePath: string | undefined): string[] {
   if (!routePath) return []
   return routePath
@@ -125,11 +139,11 @@ function folderSlugPath(folderId: string, folders: FolderDto[]): string {
 function resolveSlugSegments(segments: string[], folders: FolderDto[]): FolderDto | null {
   if (segments.length === 0) return null
   let current =
-    folders.find((f) => f.isCategoryRoot && slugifyName(f.name) === segments[0]) ?? null
+    folders.find((f) => f.isCategoryRoot && slugEquals(f.name, segments[0])) ?? null
   if (!current) return null
   for (let i = 1; i < segments.length; i += 1) {
     const next = folders.find(
-      (f) => f.parentFolderId === current!.folderId && slugifyName(f.name) === segments[i]
+      (f) => f.parentFolderId === current!.folderId && slugEquals(f.name, segments[i])
     )
     if (!next) break
     current = next
@@ -174,9 +188,9 @@ function buildFolderTree(folders: FolderDto[]): FolderNode[] {
   }
 
   for (const node of map.values()) {
-    node.children.sort((a, b) => a.name.localeCompare(b.name))
+    node.children.sort(compareFoldersByOrder)
   }
-  return roots.sort((a, b) => a.name.localeCompare(b.name))
+  return roots.sort(compareFoldersByOrder)
 }
 
 function buildBreadcrumbs(folderId: string | null, folders: FolderDto[]): FolderDto[] {
@@ -354,10 +368,8 @@ export default function VaultBrowser(): React.JSX.Element {
   const [staged, setStaged] = useState<StagedFile[]>([])
   const uploadWait = useRef<StagedFile[]>([])
   const uploadInflight = useRef(0)
-  const [passwordTarget, setPasswordTarget] = useState<{
-    file: FileDto
-    mode: 'open' | 'download'
-  } | null>(null)
+  const [passwordTarget, setPasswordTarget] = useState<FileDto | null>(null)
+  const [viewer, setViewer] = useState<OpenedFileView | null>(null)
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [moveTarget, setMoveTarget] = useState<FileDto | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
@@ -578,18 +590,11 @@ export default function VaultBrowser(): React.JSX.Element {
   const passwordMutation = useMutation({
     mutationFn: async (password: string) => {
       if (!passwordTarget) throw new Error('No file selected.')
-      const payload = { fileId: passwordTarget.file.fileId, password }
-      if (passwordTarget.mode === 'open') {
-        return api.openFile(payload)
-      }
-      return api.downloadFile(payload)
+      return api.openFile({ fileId: passwordTarget.fileId, password })
     },
-    onSuccess: (result) => {
-      if ('savedPath' in result) {
-        setStatus(`Downloaded “${result.savedPath}”.`)
-      } else {
-        setStatus(`Viewing “${result.displayName}”.`)
-      }
+    onSuccess: (opened) => {
+      setViewer(opened)
+      setStatus(`Viewing “${opened.displayName}”.`)
       setPasswordTarget(null)
       setPasswordError(null)
       void api.auth.touch()
@@ -609,13 +614,11 @@ export default function VaultBrowser(): React.JSX.Element {
 
   const childFolders = useMemo(() => {
     if (selection.type === 'root') {
-      return folders
-        .filter((f) => f.isCategoryRoot)
-        .sort((a, b) => a.name.localeCompare(b.name))
+      return folders.filter((f) => f.isCategoryRoot).sort(compareFoldersByOrder)
     }
     return folders
       .filter((f) => f.parentFolderId === selection.folderId)
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort(compareFoldersByOrder)
   }, [folders, selection])
 
   const childCountById = useMemo(() => {
@@ -632,14 +635,18 @@ export default function VaultBrowser(): React.JSX.Element {
   const moduleItems = useMemo<ModuleGridItem[]>(() => {
     return folders
       .filter((f) => f.isCategoryRoot)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((root) => ({
-        folder: root,
-        folderCount: folders.filter(
+      .map((root) => {
+        const inCategory = folders.filter(
           (f) => !f.isCategoryRoot && f.categoryId === root.categoryId
-        ).length,
-        restricted: !root.rights.view || Boolean(root.traverseOnly)
-      }))
+        )
+        return {
+          folder: root,
+          folderCount: inCategory.length,
+          fileCount:
+            (root.fileCount ?? 0) + inCategory.reduce((n, f) => n + (f.fileCount ?? 0), 0),
+          restricted: !root.rights.view || Boolean(root.traverseOnly)
+        }
+      })
   }, [folders])
 
   const folderPrefixIndex = useMemo(
@@ -1459,6 +1466,7 @@ export default function VaultBrowser(): React.JSX.Element {
                   }))
                 ]}
                 subfolders={childFolders}
+                fileCount={selectedFolder?.fileCount ?? 0}
                 childCountById={childCountById}
                 loading={sidebarQuery.isLoading}
                 denied={Boolean(selectedFolder && !selectedFolder.rights.view && !selectedFolder.traverseOnly)}
@@ -1836,9 +1844,7 @@ export default function VaultBrowser(): React.JSX.Element {
                     description={
                       managing
                         ? 'Add files here — each one encrypts as it lands. Then cut and paste into the right folders. Done returns to modules.'
-                        : here.copy
-                          ? 'You can open and download files in this folder.'
-                          : 'You can browse files in this folder.'
+                        : 'You can view files in this folder.'
                     }
                     action={
                       managing ? (
@@ -2022,11 +2028,16 @@ export default function VaultBrowser(): React.JSX.Element {
                           }}
                           onDoubleClick={() => {
                             if (stagedItem) {
-                              previewLocalFile(stagedItem.file)
+                              setViewer({
+                                fileId: stagedItem.localId,
+                                displayName: stagedItem.displayName,
+                                mimeType: stagedItem.file.type || null,
+                                blob: stagedItem.file
+                              })
                               return
                             }
                             setPasswordError(null)
-                            setPasswordTarget({ file, mode: 'open' })
+                            setPasswordTarget(file)
                           }}
                           onDragStart={(e) => {
                             e.dataTransfer.setData('application/x-sv-file', file.fileId)
@@ -2086,32 +2097,19 @@ export default function VaultBrowser(): React.JSX.Element {
                                 title="View"
                                 onClick={() => {
                                   if (stagedItem) {
-                                    previewLocalFile(stagedItem.file)
+                                    setViewer({
+                                      fileId: stagedItem.localId,
+                                      displayName: stagedItem.displayName,
+                                      mimeType: stagedItem.file.type || null,
+                                      blob: stagedItem.file
+                                    })
                                     return
                                   }
                                   setPasswordError(null)
-                                  setPasswordTarget({ file, mode: 'open' })
+                                  setPasswordTarget(file)
                                 }}
                               >
                                 <Eye className="size-3.5" />
-                              </Button>
-                            ) : null}
-                            {pending || acts.download ? (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="size-8 md:size-7"
-                                title="Download"
-                                onClick={() => {
-                                  if (stagedItem) {
-                                    downloadLocalFile(stagedItem.file, stagedItem.originalName)
-                                    return
-                                  }
-                                  setPasswordError(null)
-                                  setPasswordTarget({ file, mode: 'download' })
-                                }}
-                              >
-                                <Download className="size-3.5" />
                               </Button>
                             ) : null}
                             {managing && stagedItem?.status !== 'encrypting' ? (
@@ -2231,8 +2229,7 @@ export default function VaultBrowser(): React.JSX.Element {
 
       {passwordTarget ? (
         <PasswordPromptModal
-          file={passwordTarget.file}
-          mode={passwordTarget.mode}
+          file={passwordTarget}
           submitting={passwordMutation.isPending}
           error={passwordError}
           onCancel={() => {
@@ -2299,6 +2296,13 @@ export default function VaultBrowser(): React.JSX.Element {
               }
             : undefined
         }
+      />
+      <SecureFileViewer
+        open={viewer !== null}
+        fileName={viewer?.displayName ?? ''}
+        mimeType={viewer?.mimeType ?? null}
+        blob={viewer?.blob ?? null}
+        onClose={() => setViewer(null)}
       />
     </div>
   )

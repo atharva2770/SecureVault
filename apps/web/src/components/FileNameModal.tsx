@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ChevronRight,
-  Download,
   Eye,
   FileText,
   Loader2,
@@ -10,11 +9,12 @@ import {
 } from 'lucide-react'
 
 import type { FileDto, FolderDto } from '@securevault/domain'
-import { api } from '@/api/vault'
+import { api, type OpenedFileView } from '@/api/vault'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Modal } from '@/components/ui/modal'
+import SecureFileViewer from '@/components/SecureFileViewer'
 import type { ModuleTheme } from '@/theme/modules'
 
 type Phase = 'input' | 'scanning' | 'success' | 'notfound'
@@ -54,8 +54,8 @@ function formatDate(iso: string): string {
 /*
   Name-verified retrieval. A file only "unlocks" when the entered name matches a
   record in this folder — DOCMAN treats the display name as the file's key. We
-  verify against the real listing endpoint, then View/Download stream through the
-  real download endpoint using the matched name as the per-file password (v1).
+  verify against the real listing endpoint, then View streams through the
+  decrypt endpoint using the matched name as the per-file password (v1).
 */
 export function FileNameModal({
   open,
@@ -68,8 +68,9 @@ export function FileNameModal({
   const [phase, setPhase] = useState<Phase>('input')
   const [name, setName] = useState('')
   const [match, setMatch] = useState<FileDto | null>(null)
-  const [action, setAction] = useState<'view' | 'download' | null>(null)
+  const [action, setAction] = useState<'view' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [viewer, setViewer] = useState<OpenedFileView | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const reqId = useRef(0)
 
@@ -80,6 +81,7 @@ export function FileNameModal({
     setMatch(null)
     setAction(null)
     setActionError(null)
+    setViewer(null)
     reqId.current += 1
   }, [open, folder])
 
@@ -120,16 +122,13 @@ export function FileNameModal({
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
-  async function runAction(kind: 'view' | 'download'): Promise<void> {
+  async function runView(): Promise<void> {
     if (!match || action) return
-    setAction(kind)
+    setAction('view')
     setActionError(null)
     try {
-      if (kind === 'view') {
-        await api.files.openFile({ fileId: match.fileId, password: match.displayName })
-      } else {
-        await api.files.downloadFile({ fileId: match.fileId, password: match.displayName })
-      }
+      const opened = await api.files.openFile({ fileId: match.fileId, password: match.displayName })
+      setViewer(opened)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not open this file.')
     } finally {
@@ -138,6 +137,7 @@ export function FileNameModal({
   }
 
   return (
+    <>
     <Modal open={open} onClose={onClose} size="md" title="Retrieve a file" titleSrOnly>
       <div style={accentVars}>
         {/* Themed icon + breadcrumb */}
@@ -264,25 +264,10 @@ export function FileNameModal({
               <Button type="button" variant="ghost" onClick={retry}>
                 Retrieve another
               </Button>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={action !== null}
-                  onClick={() => void runAction('download')}
-                >
-                  {action === 'download' ? <Loader2 className="animate-spin" /> : <Download />}
-                  Download
-                </Button>
-                <Button
-                  type="button"
-                  disabled={action !== null}
-                  onClick={() => void runAction('view')}
-                >
-                  {action === 'view' ? <Loader2 className="animate-spin" /> : <Eye />}
-                  View
-                </Button>
-              </div>
+              <Button type="button" disabled={action !== null} onClick={() => void runView()}>
+                {action === 'view' ? <Loader2 className="animate-spin" /> : <Eye />}
+                View
+              </Button>
             </div>
           </div>
         ) : null}
@@ -321,6 +306,14 @@ export function FileNameModal({
         ) : null}
       </div>
     </Modal>
+    <SecureFileViewer
+      open={viewer !== null}
+      fileName={viewer?.displayName ?? match?.displayName ?? ''}
+      mimeType={viewer?.mimeType ?? match?.mimeType ?? null}
+      blob={viewer?.blob ?? null}
+      onClose={() => setViewer(null)}
+    />
+    </>
   )
 }
 

@@ -8,13 +8,11 @@ import type {
   CopyFilePayload,
   CreateCategoryPayload,
   CreateFolderPayload,
-  DownloadFileResult,
   FileCategoryDto,
   FileDto,
   FolderAclDto,
   FolderDto,
   FolderGrantDto,
-  GetFileResult,
   ListFilesFilter,
   LoginPayload,
   MoveFilePayload,
@@ -115,15 +113,14 @@ function parseDownloadName(header: string | null, fallback: string): string {
   return ascii?.[1] || fallback
 }
 
-async function downloadBlob(
+async function fetchViewBlob(
   fileId: string,
   password: string,
-  mode: 'open' | 'download',
   fallbackName: string
-): Promise<{ blob: Blob; fileName: string; mimeType: string | null }> {
+): Promise<OpenedFileView> {
   const res = await apiFetch(`/api/files/${fileId}/download`, {
     method: 'POST',
-    ...jsonBody({ password, intent: mode })
+    ...jsonBody({ password, intent: 'view' })
   })
   if (!res.ok) {
     throw new Error(await readError(res))
@@ -131,21 +128,14 @@ async function downloadBlob(
   const blob = await res.blob()
   const fileName = parseDownloadName(res.headers.get('Content-Disposition'), fallbackName)
   const mimeType = res.headers.get('Content-Type')
-  if (mode === 'open') {
-    const url = URL.createObjectURL(blob)
-    window.open(url, '_blank', 'noopener,noreferrer')
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  } else {
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = fileName
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 5_000)
-  }
-  return { blob, fileName, mimeType }
+  return { fileId, displayName: fileName, mimeType, blob }
+}
+
+export interface OpenedFileView {
+  fileId: string
+  displayName: string
+  mimeType: string | null
+  blob: Blob
 }
 
 export const api = {
@@ -204,30 +194,8 @@ export const api = {
         method: 'POST',
         ...jsonBody({ displayName: payload.displayName })
       }),
-    openFile: async (payload: PasswordFilePayload): Promise<GetFileResult> => {
-      const { fileName, mimeType } = await downloadBlob(
-        payload.fileId,
-        payload.password,
-        'open',
-        'file'
-      )
-      return {
-        fileId: payload.fileId,
-        displayName: fileName,
-        originalFileName: fileName,
-        mimeType,
-        checksum: '',
-        tempPath: ''
-      }
-    },
-    downloadFile: async (payload: PasswordFilePayload): Promise<DownloadFileResult> => {
-      const { fileName } = await downloadBlob(
-        payload.fileId,
-        payload.password,
-        'download',
-        'download'
-      )
-      return { fileId: payload.fileId, savedPath: fileName, format: 'original' }
+    openFile: async (payload: PasswordFilePayload): Promise<OpenedFileView> => {
+      return fetchViewBlob(payload.fileId, payload.password, 'file')
     }
   },
   folders: {
@@ -338,7 +306,6 @@ export const api = {
   copyFile: (payload: CopyFilePayload) => api.files.copyFile(payload),
   renameFile: (payload: RenameFilePayload) => api.files.renameFile(payload),
   openFile: (payload: PasswordFilePayload) => api.files.openFile(payload),
-  downloadFile: (payload: PasswordFilePayload) => api.files.downloadFile(payload),
   createFolder: (payload: CreateFolderPayload) => api.folders.createFolder(payload),
   deleteFolder: (folderId: string) => api.folders.deleteFolder(folderId)
 }

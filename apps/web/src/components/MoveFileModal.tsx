@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ChevronRight, Folder, Loader2 } from 'lucide-react'
 
 import type { FileDto, FolderDto } from '@securevault/domain'
+import { compareFoldersByOrder } from '@securevault/domain'
 import { Button } from '@/components/ui/button'
 import { folderPathLabel } from '@/lib/folderPath'
 import { cn } from '@/lib/utils'
@@ -41,7 +42,7 @@ export default function MoveFileModal({
         folder: f,
         label: folderPathLabel(f, byId)
       }))
-      .sort((a, b) => a.label.localeCompare(b.label))
+      .sort((a, b) => compareFoldersByOrder(a.folder, b.folder) || a.label.localeCompare(b.label))
   }, [folders, file.categoryId, currentFolderId, allowAnyFolder])
 
   const [selectedId, setSelectedId] = useState(destinations[0]?.folder.folderId ?? '')

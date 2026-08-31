@@ -203,7 +203,7 @@ export class AccessControlService {
   async getMyAccess(userId: string): Promise<MyAccessEntry[]> {
     const folders = await this.prisma.folder.findMany({
       where: { isDeleted: false },
-      orderBy: [{ isCategoryRoot: 'desc' }, { name: 'asc' }]
+      orderBy: [{ isCategoryRoot: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }]
     })
 
     const byId = new Map(folders.map((f) => [f.folderId, f]))

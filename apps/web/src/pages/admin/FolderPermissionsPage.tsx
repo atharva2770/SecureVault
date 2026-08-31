@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Folder, Loader2, Shield, Trash2 } from 'lucide-react'
 
 import type { FolderAclDto, FolderDto } from '@securevault/domain'
+import { compareFoldersByOrder } from '@securevault/domain'
 import { api } from '@/api/vault'
 import { Button } from '@/components/ui/button'
 import PageShell from '@/layout/PageShell'
@@ -59,7 +60,7 @@ export default function FolderPermissionsPage(): React.JSX.Element {
     () =>
       (foldersQuery.data ?? [])
         .filter((f) => f.isCategoryRoot)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort(compareFoldersByOrder),
     [foldersQuery.data]
   )
   const childFolders = useMemo(() => {
@@ -68,7 +69,7 @@ export default function FolderPermissionsPage(): React.JSX.Element {
       .filter((f) => f.parentFolderId === selectedFolderId || f.folderId === selectedFolderId)
       .sort(
         (a, b) =>
-          Number(b.isCategoryRoot) - Number(a.isCategoryRoot) || a.name.localeCompare(b.name)
+          Number(b.isCategoryRoot) - Number(a.isCategoryRoot) || compareFoldersByOrder(a, b)
       )
   }, [foldersQuery.data, selectedFolderId])
 
@@ -236,7 +237,7 @@ export default function FolderPermissionsPage(): React.JSX.Element {
                       disabled={!aclView}
                       onChange={(e) => setAclCopy(e.target.checked)}
                     />
-                    Copy / Download
+                    Copy
                   </label>
                   <label className="flex items-center gap-2 text-sm text-sv-text">
                     <input

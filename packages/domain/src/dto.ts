@@ -72,6 +72,12 @@ export interface FolderDto {
   name: string
   isCategoryRoot: boolean
   createdAt: string
+  /** Display sequence among siblings (lower first). */
+  sortOrder: number
+  /** Direct child folders the current user can see. */
+  childFolderCount: number
+  /** Non-deleted files directly in this folder (0 when traverse-only). */
+  fileCount: number
   /** Effective ACL rights for the current user. */
   rights: {
     view: boolean

@@ -2,7 +2,7 @@ import { memo, useCallback, useMemo, useState } from 'react'
 import { Check, ChevronRight, Folder } from 'lucide-react'
 
 import type { FolderDto, FolderGrantDto } from '@securevault/domain'
-import { FULL_FOLDER_GRANT, normalizeFolderGrant } from '@securevault/domain'
+import { FULL_FOLDER_GRANT, normalizeFolderGrant, compareFoldersByOrder } from '@securevault/domain'
 import { cn } from '@/lib/utils'
 
 type RightKey = 'canView' | 'canEdit' | 'canCopy' | 'canDelete'
@@ -10,7 +10,7 @@ type RightKey = 'canView' | 'canEdit' | 'canCopy' | 'canDelete'
 const COLUMNS: { key: RightKey | 'inherit'; label: string; title: string }[] = [
   { key: 'canView', label: 'View', title: 'Read — open the folder and see files (CanView)' },
   { key: 'canEdit', label: 'Edit', title: 'Create / upload / new folders (CanEdit)' },
-  { key: 'canCopy', label: 'Copy', title: 'Copy and download (CanCopy)' },
+  { key: 'canCopy', label: 'Copy', title: 'Copy within the vault (CanCopy)' },
   { key: 'canDelete', label: 'Delete', title: 'Delete and cut (CanDelete)' },
   { key: 'inherit', label: 'Subfolders', title: 'Same rights apply inside this folder (Inherit)' }
 ]
@@ -33,9 +33,9 @@ function buildTree(folders: FolderDto[]): FolderNode[] {
     }
   }
   for (const node of map.values()) {
-    node.children.sort((a, b) => a.name.localeCompare(b.name))
+    node.children.sort(compareFoldersByOrder)
   }
-  return roots.sort((a, b) => a.name.localeCompare(b.name))
+  return roots.sort(compareFoldersByOrder)
 }
 
 function flattenVisible(

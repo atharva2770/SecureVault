@@ -99,7 +99,8 @@ export class FolderService {
         categoryId: row.categoryId,
         parentFolderId: null,
         name: row.name,
-        isCategoryRoot: true
+        isCategoryRoot: true,
+        sortOrder: row.sortOrder
       }
     })
 
@@ -140,7 +141,7 @@ export class FolderService {
 
     const folders = await this.db.prisma.folder.findMany({
       where: { isDeleted: false },
-      orderBy: [{ isCategoryRoot: 'desc' }, { name: 'asc' }]
+      orderBy: [{ isCategoryRoot: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }]
     })
 
     const parentById = new Map(folders.map((f) => [f.folderId, f.parentFolderId]))
@@ -162,15 +163,44 @@ export class FolderService {
       delete: false
     }
 
-    const result: FolderDto[] = []
+    const visible = folders.filter(
+      (folder) => grantedIdSet.has(folder.folderId) || traverseIds.has(folder.folderId)
+    )
+    const visibleSet = new Set(visible.map((f) => f.folderId))
+
+    const childFolderCountById = new Map<string, number>()
     for (const folder of folders) {
-      if (grantedIdSet.has(folder.folderId)) {
-        result.push(toFolderDto(folder, rightsById.get(folder.folderId) ?? EMPTY_RIGHTS, false))
-      } else if (traverseIds.has(folder.folderId)) {
-        result.push(toFolderDto(folder, traverseRights, true))
-      }
+      if (!folder.parentFolderId || !visibleSet.has(folder.folderId)) continue
+      childFolderCountById.set(
+        folder.parentFolderId,
+        (childFolderCountById.get(folder.parentFolderId) ?? 0) + 1
+      )
     }
-    return result
+
+    const fileFolderIds = visible
+      .filter((folder) => grantedIdSet.has(folder.folderId))
+      .map((folder) => folder.folderId)
+    const fileGroups = fileFolderIds.length
+      ? await this.db.prisma.file.groupBy({
+          by: ['folderId'],
+          where: { isDeleted: false, folderId: { in: fileFolderIds } },
+          _count: { _all: true }
+        })
+      : []
+    const fileCountById = new Map(
+      fileGroups.map((row) => [row.folderId ?? '', row._count._all])
+    )
+
+    return visible.map((folder) => {
+      const traverseOnly = !grantedIdSet.has(folder.folderId)
+      return toFolderDto(
+        folder,
+        traverseOnly ? traverseRights : (rightsById.get(folder.folderId) ?? EMPTY_RIGHTS),
+        traverseOnly,
+        childFolderCountById.get(folder.folderId) ?? 0,
+        fileCountById.get(folder.folderId) ?? 0
+      )
+    })
   }
 
   async createSubfolder(userId: string, name: string, parentFolderId: string): Promise<FolderDto> {
@@ -202,19 +232,25 @@ export class FolderService {
       throw new Error('A folder with that name already exists here.')
     }
 
+    const maxSort = await this.db.prisma.folder.aggregate({
+      _max: { sortOrder: true },
+      where: { parentFolderId, isDeleted: false }
+    })
+
     const folder = await this.db.prisma.folder.create({
       data: {
         userId,
         categoryId: parent.categoryId,
         parentFolderId,
         name: trimmed,
-        isCategoryRoot: false
+        isCategoryRoot: false,
+        sortOrder: (maxSort._max.sortOrder ?? 0) + 10
       }
     })
 
     const rights = await this.acl.getEffectiveRights(folder.folderId, userId)
     await ensureVaultFolderDirForId(folder.folderId).catch(() => undefined)
-    return toFolderDto(folder, rights, false)
+    return toFolderDto(folder, rights, false, 0, 0)
   }
 
   async deleteFolder(userId: string, folderId: string): Promise<FolderDto> {
@@ -251,7 +287,7 @@ export class FolderService {
 
     await removeVaultFolderDirIfEmpty(folder.folderId).catch(() => undefined)
 
-    return toFolderDto(record, EMPTY_RIGHTS, false)
+    return toFolderDto(record, EMPTY_RIGHTS, false, 0, 0)
   }
 
   async getCategoryRootFolderId(userId: string, categoryId: string): Promise<string> {
@@ -301,7 +337,8 @@ export class FolderService {
             categoryId: category.categoryId,
             parentFolderId: null,
             name: category.name,
-            isCategoryRoot: true
+            isCategoryRoot: true,
+            sortOrder: category.sortOrder
           }
         })
 
@@ -333,10 +370,10 @@ export class FolderService {
           }
         })
         this.acl.invalidateUser(userId)
-      } else if (root.name !== category.name) {
+      } else if (root.sortOrder !== category.sortOrder) {
         await this.db.prisma.folder.update({
           where: { folderId: root.folderId },
-          data: { name: category.name }
+          data: { sortOrder: category.sortOrder }
         })
       }
     }
@@ -344,33 +381,29 @@ export class FolderService {
     await this.ensureDefaultDepartmentSubfolders()
   }
 
-  /** Upserts HR, Engg, QA, and Accounts categories used as main vault folders. */
+  /** Creates missing department categories. Existing names are never overwritten. */
   private async ensureDefaultDepartmentCategories(): Promise<void> {
     for (const dept of DEFAULT_VAULT_FOLDER_TREE) {
       const existing = await this.db.prisma.fileCategory.findUnique({
         where: { code: dept.code }
       })
-      if (!existing) {
-        await this.db.prisma.fileCategory.create({
-          data: {
-            code: dept.code,
-            name: dept.name,
-            sortOrder: dept.sortOrder,
-            isSystem: true
-          }
-        })
-        continue
-      }
-      if (existing.name !== dept.name) {
-        await this.db.prisma.fileCategory.update({
-          where: { categoryId: existing.categoryId },
-          data: { name: dept.name }
-        })
-      }
+      if (existing) continue
+      await this.db.prisma.fileCategory.create({
+        data: {
+          code: dept.code,
+          name: dept.name,
+          sortOrder: dept.sortOrder,
+          isSystem: true
+        }
+      })
     }
   }
 
-  /** Creates the standard subfolders under each department root if they are missing. */
+  /**
+   * Ensures the standard subfolders under each department root.
+   * Matches aliases (case-insensitive), renames to the canonical name,
+   * creates missing rows, and always applies sortOrder.
+   */
   private async ensureDefaultDepartmentSubfolders(): Promise<void> {
     for (const dept of DEFAULT_VAULT_FOLDER_TREE) {
       const category = await this.db.prisma.fileCategory.findUnique({
@@ -394,20 +427,43 @@ export class FolderService {
           parentFolderId: root.folderId,
           isDeleted: false
         },
-        select: { name: true }
+        select: { folderId: true, name: true, sortOrder: true }
       })
-      const existingNames = new Set(children.map((child) => child.name.toLowerCase()))
 
-      for (const childName of dept.children) {
-        if (existingNames.has(childName.toLowerCase())) continue
+      for (const spec of dept.children) {
+        const names = new Set(
+          [spec.name, ...(spec.aliases ?? [])].map((n) => n.toLowerCase())
+        )
+        const canonical = children.find((c) => c.name.toLowerCase() === spec.name.toLowerCase())
+        const aliasMatch = children.find((c) => names.has(c.name.toLowerCase()))
+        const match = canonical ?? aliasMatch
+
+        if (match) {
+          if (match.name !== spec.name || match.sortOrder !== spec.sortOrder) {
+            await this.db.prisma.folder.update({
+              where: { folderId: match.folderId },
+              data: { name: spec.name, sortOrder: spec.sortOrder }
+            })
+            match.name = spec.name
+            match.sortOrder = spec.sortOrder
+          }
+          continue
+        }
+
         const created = await this.db.prisma.folder.create({
           data: {
             userId: root.userId,
             categoryId: category.categoryId,
             parentFolderId: root.folderId,
-            name: childName,
-            isCategoryRoot: false
+            name: spec.name,
+            isCategoryRoot: false,
+            sortOrder: spec.sortOrder
           }
+        })
+        children.push({
+          folderId: created.folderId,
+          name: created.name,
+          sortOrder: created.sortOrder
         })
         await ensureVaultFolderDirForId(created.folderId).catch(() => undefined)
       }
@@ -423,9 +479,12 @@ function toFolderDto(
     name: string
     isCategoryRoot: boolean
     createdAt: Date
+    sortOrder: number
   },
   rights: FolderRights,
-  traverseOnly: boolean
+  traverseOnly: boolean,
+  childFolderCount: number,
+  fileCount: number
 ): FolderDto {
   return {
     folderId: folder.folderId,
@@ -434,6 +493,9 @@ function toFolderDto(
     name: folder.name,
     isCategoryRoot: folder.isCategoryRoot,
     createdAt: folder.createdAt.toISOString(),
+    sortOrder: folder.sortOrder,
+    childFolderCount,
+    fileCount,
     rights: {
       view: rights.view,
       edit: rights.edit,

@@ -812,3 +812,16 @@ html.theme-switching *:not(svg):not(path):not(canvas) {
     scroll-behavior: auto !important;
   }
 }
+
+/* View-only document overlay: printing yields a blank page. */
+html.sv-secure-viewing .sv-secure-viewer,
+html.sv-secure-viewing .sv-secure-page {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media print {
+  html.sv-secure-viewing body * {
+    visibility: hidden !important;
+  }
+}

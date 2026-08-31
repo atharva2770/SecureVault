@@ -1,5 +1,6 @@
 import { ChevronRight, ClipboardPaste, FileStack, Folder, FolderOpen, Lock, Search, Upload } from 'lucide-react'
 import type { FolderDto } from '@securevault/domain'
+import { formatContentCounts } from '@securevault/domain'
 
 import { ModuleBackdrop } from '@/components/ModuleBackdrop'
 import { moduleIcon } from '@/components/module-icons'
@@ -19,6 +20,8 @@ interface ModulePageProps {
   tagline: string
   crumbs: ModuleCrumb[]
   subfolders: FolderDto[]
+  /** Direct files in the open folder (for the header chip). */
+  fileCount?: number
   /** Nested folder counts keyed by folderId — visual only. */
   childCountById: Map<string, number>
   loading?: boolean
@@ -46,6 +49,7 @@ export function ModulePage({
   tagline,
   crumbs,
   subfolders,
+  fileCount = 0,
   childCountById,
   loading = false,
   denied = false,
@@ -71,7 +75,7 @@ export function ModulePage({
       onPickFile(folder)
       return
     }
-    const nested = childCountById.get(folder.folderId) ?? 0
+    const nested = folder.childFolderCount ?? childCountById.get(folder.folderId) ?? 0
     if (nested > 0) onOpenFolder(folder)
     else onPickFile(folder)
   }
@@ -149,11 +153,16 @@ export function ModulePage({
             <Icon className="h-8 w-8" />
           </span>
           <div className="min-w-0">
-            <h1 className="font-display text-3xl font-extrabold sm:text-4xl">{folderName}</h1>
+            <h1 className="font-display text-4xl font-extrabold sm:text-5xl">{folderName}</h1>
             <p className="mt-1 text-sm text-sv-text-muted">{tagline}</p>
+            <p className="mt-2 max-w-xl text-sm font-medium text-sv-text">
+              Enter the exact file name to view the file.
+            </p>
           </div>
           <span className="mod-chip ml-auto rounded-full px-4 py-2 text-xs font-semibold">
-            {loading ? '…' : `${subfolders.length} sub-folder${subfolders.length === 1 ? '' : 's'}`}
+            {loading
+              ? '…'
+              : formatContentCounts(fileCount, subfolders.length, 'sub-folder')}
           </span>
         </header>
 
@@ -211,7 +220,7 @@ export function ModulePage({
         ) : null}
 
         {loading ? (
-          <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading folders">
+          <ul className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading folders">
             {Array.from({ length: 6 }).map((_, i) => (
               <li key={i}>
                 <SubfolderSkeleton />
@@ -219,54 +228,49 @@ export function ModulePage({
             ))}
           </ul>
         ) : subfolders.length > 0 ? (
-          <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {subfolders.map((folder) => {
-              const nested = childCountById.get(folder.folderId) ?? 0
+              const nested = folder.childFolderCount ?? childCountById.get(folder.folderId) ?? 0
+              const files = folder.fileCount ?? 0
               return (
                 <li key={folder.folderId}>
-                  <div className="mod-tile group relative flex w-full items-center gap-4 rounded-2xl p-5">
-                  <button
-                    type="button"
-                    onClick={() => openCard(folder)}
-                    className="flex min-w-0 flex-1 items-center gap-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-sv-accent"
-                  >
-                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-mod text-sv-bg">
-                      <Folder className="h-6 w-6" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-base font-bold">
-                        {folder.name}
-                      </span>
-                      <span className="mt-0.5 flex items-center gap-1.5 text-xs text-sv-text-muted">
-                        <FileStack className="h-3.5 w-3.5" />
-                        {nested > 0
-                          ? `${nested} sub-folder${nested === 1 ? '' : 's'}`
-                          : isAdmin
-                            ? ingestActive
-                              ? 'Open folder · add, cut & paste files'
-                              : 'Retrieve by name, or manage files'
-                            : 'Retrieve a file by name'}
-                      </span>
-                    </span>
-                    <ChevronRight className="ml-auto h-5 w-5 shrink-0 text-sv-text-muted transition-transform group-hover:translate-x-1 group-hover:text-mod" />
-                  </button>
-                  {isAdmin && ingestActive && canPaste && onPasteIntoFolder ? (
-                    <Button
+                  <div className="mod-tile group relative flex h-full w-full items-start gap-3 rounded-xl p-4">
+                    <button
                       type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 shrink-0 gap-1 px-2 text-xs"
-                      disabled={pastePending}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onPasteIntoFolder(folder)
-                      }}
-                      title={`Paste into ${folder.name}`}
+                      onClick={() => openCard(folder)}
+                      className="flex min-w-0 flex-1 items-start gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-sv-accent"
                     >
-                      <ClipboardPaste className="size-3.5" />
-                      Paste
-                    </Button>
-                  ) : null}
+                      <span className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-mod text-sv-bg">
+                        <Folder className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-display text-[30px] font-bold leading-snug text-pretty break-words">
+                          {folder.name}
+                        </span>
+                        <span className="mt-1.5 flex items-center gap-1.5 text-xs text-sv-text-muted">
+                          <FileStack className="h-3.5 w-3.5 shrink-0" />
+                          {formatContentCounts(files, nested)}
+                        </span>
+                      </span>
+                      <ChevronRight className="mt-2 h-5 w-5 shrink-0 text-sv-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-mod" />
+                    </button>
+                    {isAdmin && ingestActive && canPaste && onPasteIntoFolder ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 shrink-0 gap-1 px-2 text-xs"
+                        disabled={pastePending}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onPasteIntoFolder(folder)
+                        }}
+                        title={`Paste into ${folder.name}`}
+                      >
+                        <ClipboardPaste className="size-3.5" />
+                        Paste
+                      </Button>
+                    ) : null}
                   </div>
                 </li>
               )

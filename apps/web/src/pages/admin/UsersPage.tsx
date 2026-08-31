@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 
 import type { AdminUserDto, FolderAclDto, FolderDto } from '@securevault/domain'
+import { compareFoldersByOrder } from '@securevault/domain'
 import { api } from '@/api/vault'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -69,7 +70,7 @@ export default function UsersPage(): React.JSX.Element {
     () =>
       (foldersQuery.data ?? [])
         .filter((f) => f.isCategoryRoot)
-        .sort((a, b) => a.name.localeCompare(b.name)),
+        .sort(compareFoldersByOrder),
     [foldersQuery.data]
   )
 

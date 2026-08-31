@@ -75,25 +75,3 @@ export function stagedToFileDto(item: StagedFile, folder: FolderDto | undefined)
     categoryName: folder?.name ?? null
   }
 }
-
-export function previewLocalFile(file: File): void {
-  const url = URL.createObjectURL(file)
-  const opened = window.open(url, '_blank', 'noopener,noreferrer')
-  if (!opened) {
-    const a = document.createElement('a')
-    a.href = url
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    a.click()
-  }
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-}
-
-export function downloadLocalFile(file: File, name: string): void {
-  const url = URL.createObjectURL(file)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name || file.name
-  a.click()
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-}

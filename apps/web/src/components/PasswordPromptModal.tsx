@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 
 interface PasswordPromptModalProps {
   file: FileDto
-  mode: 'open' | 'download'
   submitting?: boolean
   error?: string | null
   onCancel: () => void
@@ -15,7 +14,6 @@ interface PasswordPromptModalProps {
 
 export default function PasswordPromptModal({
   file,
-  mode,
   submitting = false,
   error,
   onCancel,
@@ -37,11 +35,7 @@ export default function PasswordPromptModal({
             <Lock className="size-4" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-sv-text">
-              {mode === 'open'
-                ? 'Enter password to view'
-                : 'Enter password to download original'}
-            </h2>
+            <h2 className="text-base font-semibold text-sv-text">Enter password to view</h2>
             <p className="truncate text-xs text-sv-text-muted" title={file.displayName}>
               {file.displayName}
             </p>
@@ -68,7 +62,7 @@ export default function PasswordPromptModal({
           </Button>
           <Button type="submit" disabled={!password || submitting}>
             {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-            {mode === 'open' ? 'Unlock & view' : 'Unlock & download'}
+            Unlock & view
           </Button>
         </div>
       </form>
