@@ -144,7 +144,18 @@ async function anonymousJar(): Promise<Jar> {
   return jar
 }
 
-async function signIn(username: string, password: string): Promise<Jar> {
+/**
+ * Sessions are reused across cases. The auth rate-limit bucket is 10/minute per
+ * IP and every request here comes from 127.0.0.1, so signing in per case would
+ * have the suite fighting a production control rather than testing one.
+ * Pass `fresh` where a case genuinely needs a second, independent session.
+ */
+const sessionCache = new Map<string, Jar>()
+
+async function signIn(username: string, password: string, fresh = false): Promise<Jar> {
+  const cached = sessionCache.get(username)
+  if (!fresh && cached) return { ...cached }
+
   const jar = await anonymousJar()
   const res = await call(jar, {
     method: 'POST',
@@ -154,6 +165,7 @@ async function signIn(username: string, password: string): Promise<Jar> {
   if (res.statusCode !== 200) {
     throw new Error(`Login failed for ${username}: ${res.statusCode} ${res.payload}`)
   }
+  if (!fresh) sessionCache.set(username, { ...jar })
   return jar
 }
 
@@ -584,25 +596,25 @@ describeIfDb('ACL enforcement over HTTP', () => {
     const expectedChecksum = createHash('sha256').update(content).digest('hex')
     expect(record.checksum).toBe(expectedChecksum)
 
+    // The fixture categories do not require a file password, so none is sent.
     const downloaded = await call(jar, {
       method: 'POST',
       url: `/api/files/${record.fileId}/download`,
-      payload: { password: displayName, intent: 'view' }
+      payload: { intent: 'view' }
     })
     expect(downloaded.statusCode).toBe(200)
     expect(downloaded.headers['x-checksum-sha256']).toBe(expectedChecksum)
     expect(Buffer.compare(downloaded.rawPayload, content)).toBe(0)
   })
 
-  // EXPECTED TO FAIL — regression test for finding F6, fixed in P0-04.
+  // Regression test for finding F6, fixed in P0-04.
   //
-  // The per-file "open" password is the Argon2 hash of the display name
-  // (VaultFileService.addFile hashes displayName; renameFile re-hashes it).
-  // copyFile renames the copy through uniqueCopyName() when the target folder
-  // already holds that name, but carries the SOURCE row's accessPasswordHash
-  // across unchanged (VaultFileService.ts:372), so the copy can never be opened
-  // with its own name. Do not fix VaultFileService here.
-  it.fails('8. round-trips a copy into a second folder and opens the COPY', async () => {
+  // This was an expected failure while the access password was the Argon2 hash
+  // of the display name: copyFile renames a colliding copy but carries the
+  // source's hash across, so the copy could never be opened under its own name.
+  // The password is now independent of the name, so inheriting the source's
+  // credential is correct and the copy opens like any other file.
+  it('8. round-trips a copy into a second folder and opens the COPY', async () => {
     const jar = await signIn(fixture.users.admin.username, PASSWORD)
 
     const first = await call(jar, {
@@ -612,7 +624,8 @@ describeIfDb('ACL enforcement over HTTP', () => {
     })
     expect(first.statusCode).toBe(200)
 
-    // Second copy collides with the first, so it is renamed — the case that trips F6.
+    // Second copy collides with the first, so it is renamed — the case that used
+    // to trip F6. The rename must no longer affect whether the copy opens.
     const second = await call(jar, {
       method: 'POST',
       url: `/api/files/${fixture.seedFileId}/copy`,
@@ -625,15 +638,17 @@ describeIfDb('ACL enforcement over HTTP', () => {
     const opened = await call(jar, {
       method: 'POST',
       url: `/api/files/${copy.fileId}/download`,
-      payload: { password: copy.displayName, intent: 'view' }
+      payload: { intent: 'view' }
     })
     expect(opened.statusCode).toBe(200)
   })
 
   // Runs last: it rotates the MEMBER password the earlier cases sign in with.
   it('9. revokes every other session when a password is changed', async () => {
-    const first = await signIn(fixture.users.member.username, memberPassword)
-    const second = await signIn(fixture.users.member.username, memberPassword)
+    const first = await signIn(fixture.users.member.username, memberPassword, true)
+    const second = await signIn(fixture.users.member.username, memberPassword, true)
+    // The rotation below invalidates anything cached for this user.
+    sessionCache.delete(fixture.users.member.username)
 
     expect((await call(second, { method: 'GET', url: '/api/files' })).statusCode).toBe(200)
 
