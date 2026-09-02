@@ -35,6 +35,12 @@ export interface ApiConfig {
   jsonBodyLimitBytes: number
   maxUploadBytes: number
   passwordBreachCheck: boolean
+  /**
+   * Whether POST /api/auth/register serves anyone. False by default, and forced
+   * false in production unless the operator also sets the _UNSAFE escape hatch.
+   * Bootstrap (an empty Users table) is handled in the route, not here.
+   */
+  allowPublicRegister: boolean
   nodeEnv: string
 }
 
@@ -148,6 +154,12 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const trustedProxies = parseTrustedProxies(env)
   const trustProxyEnabled = env.API_TRUST_PROXY === 'true'
 
+  // Two independent switches in production: flipping the ordinary flag is not
+  // enough, so nobody re-opens registration by copying a development .env.
+  const registerRequested = env.ALLOW_PUBLIC_REGISTER === 'true'
+  const unsafeOverride = env.ALLOW_PUBLIC_REGISTER_UNSAFE === 'true'
+  const allowPublicRegister = isProd ? registerRequested && unsafeOverride : registerRequested
+
   const cookieSecure = env.API_COOKIE_SECURE === 'true'
   if (isProd && !cookieSecure) {
     throw new ConfigError('API_COOKIE_SECURE=true is required when NODE_ENV=production.')
@@ -172,6 +184,7 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     jsonBodyLimitBytes: envInt(env, 'API_JSON_BODY_LIMIT', 64 * 1024),
     maxUploadBytes: envInt(env, 'API_MAX_UPLOAD_BYTES', 100 * 1024 * 1024),
     passwordBreachCheck: env.PASSWORD_BREACH_CHECK === 'true',
+    allowPublicRegister,
     nodeEnv
   }
 }

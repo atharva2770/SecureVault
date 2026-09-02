@@ -10,6 +10,9 @@ import { RbacService } from '../rbac/RbacService'
 import { safeEqualHex, secureZero, sha256Hex } from '../utils/secure'
 import { CapacityError } from '../utils/Semaphore'
 
+/** Single public reason for any failed registration. Never vary this string. */
+export const REGISTRATION_REJECTED = 'Registration could not be completed.'
+
 interface StoredAuthParams extends Argon2Params {
   kekVerifier: string
 }
@@ -58,15 +61,25 @@ export class AuthCredentials {
     password: string,
     meta?: AuthAuditMeta
   ): Promise<AuthCredentialResult> {
-    const normalized = this.normalizeUsername(username)
-    this.assertPassword(password)
-    await enforcePasswordPolicy(password, { username: normalized })
+    let normalized: string
+    try {
+      normalized = this.normalizeUsername(username)
+      this.assertPassword(password)
+      await enforcePasswordPolicy(password, { username: normalized })
+    } catch (error) {
+      // Load shedding is not a credential verdict.
+      if (error instanceof CapacityError) throw error
+      throw this.registrationRejected(username, error)
+    }
 
     const existing = await this.db.prisma.user.findUnique({
       where: { username: normalized }
     })
     if (existing) {
-      throw new Error('Username is already taken.')
+      // A distinct "already taken" reply is a username-enumeration oracle. Every
+      // rejection reason answers identically; the real one goes to the log and
+      // the audit trail.
+      throw this.registrationRejected(normalized, new Error('Username is already taken.'))
     }
 
     const salt = this.crypto.generateSalt(32)
@@ -283,6 +296,27 @@ export class AuthCredentials {
    * Derives a throwaway KEK to equalize the wall-clock cost of a failed login
    * for an unknown username against a real credential check (anti-enumeration).
    */
+  /**
+   * True when no account exists yet, so a fresh deployment can still create its
+   * first admin with registration otherwise disabled.
+   */
+  async hasNoUsers(): Promise<boolean> {
+    return (await this.db.prisma.user.count()) === 0
+  }
+
+  /**
+   * One reply for every registration failure. The caller-visible message never
+   * varies; the reason is recorded server-side.
+   */
+  private registrationRejected(username: string, cause: unknown): Error {
+    const reason = cause instanceof Error ? cause.message : String(cause)
+    recordAudit({
+      action: AuditAction.AUTH_DENY,
+      details: `register-rejected:${username}:${reason}`.slice(0, 400)
+    })
+    return new Error(REGISTRATION_REJECTED)
+  }
+
   private async burnKekDerivation(password: string): Promise<void> {
     try {
       const salt = this.crypto.generateSalt(32)

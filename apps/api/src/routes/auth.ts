@@ -44,6 +44,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
   r.post('/api/auth/register', { schema: { body: registerBodySchema } }, async (request, reply) => {
     try {
+      // Closed by default. 404 rather than 403 so the reply does not confirm the
+      // route exists at all — except while the vault has no accounts, which is
+      // how a fresh deployment creates its first admin.
+      if (!apiConfig.allowPublicRegister && !(await credentials.hasNoUsers())) {
+        request.log.warn(
+          { event: 'register_disabled', ip: request.ip },
+          'registration attempt while disabled'
+        )
+        return reply.status(404).send({ error: 'Not found.' })
+      }
+
       try {
         assertRegisterAllowed(request.ip)
       } catch (error) {

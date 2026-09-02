@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import {
   CapacityError,
+  REGISTRATION_REJECTED,
   PasswordPolicyError,
   UnsupportedUploadTypeError,
   UploadTooLargeError
@@ -31,7 +32,7 @@ const PUBLIC_BY_STATUS: Record<number, string> = {
 const PUBLIC_MESSAGES = new Set([
   'Invalid username or password.',
   'This account is disabled.',
-  'Username is already taken.',
+  REGISTRATION_REJECTED,
   'Username must be between 3 and 100 characters.',
   'Current password is incorrect.',
   'Incorrect file password.',
@@ -97,6 +98,8 @@ function isAbortError(error: unknown): boolean {
 }
 
 function statusFromMessage(message: string): number {
+  // Every registration failure answers with one status and one string.
+  if (message === REGISTRATION_REJECTED) return 400
   const lower = message.toLowerCase()
   if (lower === 'access denied.' || lower.includes('admin privileges') || lower.includes('only admins')) {
     return 403

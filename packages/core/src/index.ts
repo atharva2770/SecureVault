@@ -58,7 +58,7 @@ export {
   UnsupportedUploadTypeError,
   UploadTooLargeError
 } from './files/sniffUpload'
-export { AuthCredentials } from './auth/AuthCredentials'
+export { AuthCredentials, REGISTRATION_REJECTED } from './auth/AuthCredentials'
 export type { AuthCredentialResult, VerifiedUser, AuthAuditMeta } from './auth/AuthCredentials'
 export {
   enforcePasswordPolicy,
