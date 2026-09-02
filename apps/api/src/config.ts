@@ -1,3 +1,5 @@
+import { isIP } from 'node:net'
+
 import { loadWorkspaceEnv } from '@securevault/db'
 import { resolveVaultBlobRoot } from '@securevault/core'
 
@@ -20,7 +22,14 @@ export interface ApiConfig {
   webOrigins: string[]
   cookieSecure: boolean
   httpsEnabled: boolean
-  trustProxy: boolean
+  /**
+   * Passed straight to Fastify. Never the boolean `true`: that tells proxy-addr
+   * to trust the whole X-Forwarded-For chain, making `request.ip` — and with it
+   * the login lockout, the register throttle, the rate limiter and the AuditLogs
+   * ip column — attacker-controlled.
+   */
+  trustProxy: string[] | false
+  trustedProxies: string[]
   blobRoot: string
   kmsWrapKeyHex: string
   jsonBodyLimitBytes: number
@@ -52,6 +61,47 @@ function required(env: NodeJS.ProcessEnv, name: string): string {
     throw new ConfigError(`${name} still contains a placeholder password.`)
   }
   return value
+}
+
+/** Named ranges proxy-addr understands in place of a literal address. */
+const PROXY_KEYWORDS = new Set(['loopback', 'linklocal', 'uniquelocal'])
+
+/**
+ * Accepts an IPv4/IPv6 literal, a CIDR block, or one of proxy-addr's named
+ * ranges. A malformed entry is fatal: silently ignoring it would leave the
+ * deployment trusting a header it believes it is filtering.
+ */
+function parseTrustedProxies(env: NodeJS.ProcessEnv): string[] {
+  const raw = read(env, 'API_TRUSTED_PROXIES') || '127.0.0.1,::1'
+  const entries = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+  if (!entries.length) {
+    throw new ConfigError('API_TRUSTED_PROXIES must list at least one address.')
+  }
+
+  for (const entry of entries) {
+    if (PROXY_KEYWORDS.has(entry.toLowerCase())) continue
+
+    const slash = entry.indexOf('/')
+    const address = slash === -1 ? entry : entry.slice(0, slash)
+    const family = isIP(address)
+    if (!family) {
+      throw new ConfigError(`API_TRUSTED_PROXIES contains an invalid address: ${entry}`)
+    }
+    if (slash !== -1) {
+      const prefix = entry.slice(slash + 1)
+      const bits = Number(prefix)
+      const max = family === 4 ? 32 : 128
+      if (!/^\d{1,3}$/.test(prefix) || !Number.isInteger(bits) || bits < 0 || bits > max) {
+        throw new ConfigError(`API_TRUSTED_PROXIES contains an invalid CIDR prefix: ${entry}`)
+      }
+    }
+  }
+
+  return entries
 }
 
 function envInt(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -93,6 +143,11 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     .map((origin) => origin.trim())
     .filter(Boolean)
 
+  // Parsed unconditionally so a malformed list is caught at boot even on a
+  // deployment that has not yet switched API_TRUST_PROXY on.
+  const trustedProxies = parseTrustedProxies(env)
+  const trustProxyEnabled = env.API_TRUST_PROXY === 'true'
+
   const cookieSecure = env.API_COOKIE_SECURE === 'true'
   if (isProd && !cookieSecure) {
     throw new ConfigError('API_COOKIE_SECURE=true is required when NODE_ENV=production.')
@@ -110,7 +165,8 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     webOrigins,
     cookieSecure,
     httpsEnabled: env.HTTPS_ENABLED === 'true',
-    trustProxy: env.API_TRUST_PROXY === 'true',
+    trustProxy: trustProxyEnabled ? trustedProxies : false,
+    trustedProxies,
     blobRoot: resolveVaultBlobRoot(env.VAULT_BLOB_ROOT),
     kmsWrapKeyHex,
     jsonBodyLimitBytes: envInt(env, 'API_JSON_BODY_LIMIT', 64 * 1024),
