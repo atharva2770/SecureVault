@@ -42,6 +42,7 @@ import ModuleGrid, { type ModuleGridItem } from '@/components/ModuleGrid'
 import ModulePage from '@/components/ModulePage'
 import { PageTransition } from '@/components/PageTransition'
 import MoveFileModal from '@/components/MoveFileModal'
+import BatchPasswordModal from '@/components/BatchPasswordModal'
 import PasswordPromptModal from '@/components/PasswordPromptModal'
 import RenameFileModal from '@/components/RenameFileModal'
 import VaultContextMenu, {
@@ -375,6 +376,9 @@ export default function VaultBrowser(): React.JSX.Element {
   const [moveError, setMoveError] = useState<string | null>(null)
   const [renameTarget, setRenameTarget] = useState<FileDto | null>(null)
   const [renameError, setRenameError] = useState<string | null>(null)
+  const [pendingBatch, setPendingBatch] = useState<{ files: File[]; folderId: string } | null>(
+    null
+  )
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
@@ -403,6 +407,24 @@ export default function VaultBrowser(): React.JSX.Element {
   })
 
   const folders = sidebarQuery.data?.folders ?? []
+  const categories = sidebarQuery.data?.categories ?? []
+
+  // Which modules demand a per-file password. Everything else is governed by the
+  // folder ACL alone, so those files open without a prompt.
+  const requiresPasswordByCategoryId = useMemo(
+    () => new Map(categories.map((c) => [c.categoryId, c.requiresFilePassword])),
+    [categories]
+  )
+
+  function categoryRequiresPassword(categoryId: string | null | undefined): boolean {
+    if (!categoryId) return true // Unknown policy — ask, rather than assume open.
+    return requiresPasswordByCategoryId.get(categoryId) ?? true
+  }
+
+  function folderRequiresPassword(folderId: string | null | undefined): boolean {
+    const folder = folders.find((f) => f.folderId === folderId)
+    return categoryRequiresPassword(folder?.categoryId)
+  }
 
   useEffect(() => {
     const segments = parsePathSegments(routeSlugPath)
@@ -586,6 +608,31 @@ export default function VaultBrowser(): React.JSX.Element {
       setStatus(error.message || 'Paste failed.')
     }
   })
+
+  /** Opens a file that needs no password, without showing the prompt. */
+  const directOpenMutation = useMutation({
+    mutationFn: async (file: FileDto) => api.openFile({ fileId: file.fileId }),
+    onSuccess: (opened) => {
+      setViewer(opened)
+      setStatus(`Viewing “${opened.displayName}”.`)
+      void api.auth.touch()
+    },
+    onError: (error: Error) => {
+      setStatus(error.message || 'Could not open this file.')
+    }
+  })
+
+  /**
+   * Route an open request: prompt only where the module policy asks for it.
+   */
+  function requestOpen(file: FileDto): void {
+    if (categoryRequiresPassword(file.categoryId)) {
+      setPasswordError(null)
+      setPasswordTarget(file)
+      return
+    }
+    directOpenMutation.mutate(file)
+  }
 
   const passwordMutation = useMutation({
     mutationFn: async (password: string) => {
@@ -1051,6 +1098,17 @@ export default function VaultBrowser(): React.JSX.Element {
     const list = files instanceof FileList ? Array.from(files) : (files ?? [])
     if (!list.length) return
     const folderId = selection.folderId
+
+    // Modules that require a password collect one per drop, not per file — this
+    // path has to stay usable for thousands of documents.
+    if (folderRequiresPassword(folderId)) {
+      setPendingBatch({ files: list, folderId })
+      return
+    }
+    stageBatch(list, folderId, null)
+  }
+
+  function stageBatch(list: File[], folderId: string, accessPassword: string | null): void {
     const jobs: StagedFile[] = []
     let working = [...staged]
     for (const file of list) {
@@ -1062,7 +1120,8 @@ export default function VaultBrowser(): React.JSX.Element {
         displayName: uniqueDisplayName(displayNameFromFile(file.name), taken),
         folderId,
         addedAt: new Date().toISOString(),
-        status: 'encrypting'
+        status: 'encrypting',
+        accessPassword
       }
       working.push(job)
       jobs.push(job)
@@ -1096,7 +1155,8 @@ export default function VaultBrowser(): React.JSX.Element {
         file: job.file,
         displayName: job.displayName,
         categoryId: folder?.categoryId ?? '',
-        folderId: job.folderId
+        folderId: job.folderId,
+        accessPassword: job.accessPassword ?? null
       })
       setStaged((prev) => prev.filter((s) => s.localId !== job.localId))
       await queryClient.invalidateQueries({ queryKey: ['files'] })
@@ -2036,8 +2096,7 @@ export default function VaultBrowser(): React.JSX.Element {
                               })
                               return
                             }
-                            setPasswordError(null)
-                            setPasswordTarget(file)
+                            requestOpen(file)
                           }}
                           onDragStart={(e) => {
                             e.dataTransfer.setData('application/x-sv-file', file.fileId)
@@ -2105,8 +2164,7 @@ export default function VaultBrowser(): React.JSX.Element {
                                     })
                                     return
                                   }
-                                  setPasswordError(null)
-                                  setPasswordTarget(file)
+                                  requestOpen(file)
                                 }}
                               >
                                 <Eye className="size-3.5" />
@@ -2242,6 +2300,24 @@ export default function VaultBrowser(): React.JSX.Element {
         />
       ) : null}
 
+      {pendingBatch ? (
+        <BatchPasswordModal
+          folderName={
+            folders.find((f) => f.folderId === pendingBatch.folderId)?.name ?? 'this folder'
+          }
+          fileCount={pendingBatch.files.length}
+          onCancel={() => {
+            setPendingBatch(null)
+            setStatus('Upload cancelled.')
+          }}
+          onConfirm={(password) => {
+            const batch = pendingBatch
+            setPendingBatch(null)
+            stageBatch(batch.files, batch.folderId, password)
+          }}
+        />
+      ) : null}
+
       {moveTarget ? (
         <MoveFileModal
           file={moveTarget}
@@ -2286,6 +2362,7 @@ export default function VaultBrowser(): React.JSX.Element {
         folder={fileNameFolder}
         moduleName={breadcrumbs[0]?.name ?? selectedFolder?.name ?? 'Module'}
         theme={moduleTheme}
+        requiresFilePassword={categoryRequiresPassword(fileNameFolder?.categoryId)}
         onClose={() => setFileNameFolder(null)}
         onManageFiles={
           isAdmin

@@ -73,7 +73,7 @@ export function ModuleCard({
       <h2 className="mt-5 font-display text-2xl font-bold leading-snug break-words sm:text-3xl">{label}</h2>
       {tagline ? <p className="mt-1 text-sm text-sv-text-muted">{tagline}</p> : null}
       <p className="mt-2 text-xs font-medium text-sv-text">
-        Enter the exact file name to view the file.
+        Retrieve a document by its exact name.
       </p>
       <div className="mt-6 flex items-center gap-2 text-xs font-semibold text-mod">
         <FolderClosed className="h-4 w-4" />

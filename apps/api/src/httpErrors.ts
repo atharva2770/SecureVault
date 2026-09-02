@@ -47,6 +47,7 @@ const PUBLIC_MESSAGES = new Set([
   'A file part named "file" is required.',
   'displayName and categoryId are required.',
   'File password is required.',
+  'A file password is required for this category.',
   'File name is required.',
   'File name is too long.',
   'Folder name must be between 1 and 255 characters.',

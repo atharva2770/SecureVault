@@ -115,12 +115,14 @@ function parseDownloadName(header: string | null, fallback: string): string {
 
 async function fetchViewBlob(
   fileId: string,
-  password: string,
+  password: string | null | undefined,
   fallbackName: string
 ): Promise<OpenedFileView> {
+  // Categories that do not require a per-file password send no password at all.
+  const body = password ? { password, intent: 'view' } : { intent: 'view' }
   const res = await apiFetch(`/api/files/${fileId}/download`, {
     method: 'POST',
-    ...jsonBody({ password, intent: 'view' })
+    ...jsonBody(body)
   })
   if (!res.ok) {
     throw new Error(await readError(res))
@@ -160,6 +162,7 @@ export const api = {
       displayName: string
       categoryId: string
       folderId?: string | null
+      accessPassword?: string | null
     }): Promise<FileDto> => {
       const form = new FormData()
       // Text fields must come before the file. Fastify only exposes fields parsed
@@ -167,6 +170,7 @@ export const api = {
       form.append('displayName', payload.displayName)
       if (payload.folderId) form.append('folderId', payload.folderId)
       if (payload.categoryId) form.append('categoryId', payload.categoryId)
+      if (payload.accessPassword) form.append('accessPassword', payload.accessPassword)
       form.append('file', payload.file)
       return json<FileDto>('/api/files', { method: 'POST', body: form })
     },
@@ -300,6 +304,7 @@ export const api = {
     displayName: string
     categoryId: string
     folderId?: string | null
+    accessPassword?: string | null
   }) => api.files.addFile(payload),
   deleteFile: (fileId: string) => api.files.deleteFile(fileId),
   moveFile: (payload: MoveFilePayload) => api.files.moveFile(payload),

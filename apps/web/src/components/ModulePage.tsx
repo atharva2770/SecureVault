@@ -156,7 +156,7 @@ export function ModulePage({
             <h1 className="font-display text-4xl font-extrabold sm:text-5xl">{folderName}</h1>
             <p className="mt-1 text-sm text-sv-text-muted">{tagline}</p>
             <p className="mt-2 max-w-xl text-sm font-medium text-sv-text">
-              Enter the exact file name to view the file.
+              Retrieve a document by its exact name.
             </p>
           </div>
           <span className="mod-chip ml-auto rounded-full px-4 py-2 text-xs font-semibold">

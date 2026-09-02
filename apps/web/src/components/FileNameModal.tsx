@@ -30,6 +30,8 @@ interface FileNameModalProps {
   theme: ModuleTheme
   /** Admin: skip retrieve and start a bulk ingest session in this folder. */
   onManageFiles?: () => void
+  /** True when this module's policy demands a per-file password to open. */
+  requiresFilePassword?: boolean
 }
 
 function sleep(ms: number): Promise<void> {
@@ -52,13 +54,15 @@ function formatDate(iso: string): string {
 }
 
 /*
-  Name-verified retrieval. A file only "unlocks" when the entered name matches a
-  record in this folder — DOCMAN treats the display name as the file's key. We
-  verify against the real listing endpoint, then View streams through the
-  decrypt endpoint using the matched name as the per-file password (v1).
+  Name-verified retrieval. The user names the document they want and we match it
+  against the real listing endpoint, so the folder's contents are never browsed
+  wholesale. The name is a lookup key, not a credential: access is decided by the
+  folder ACL, and only modules whose category opts in additionally ask for a
+  per-file password before View streams through the decrypt endpoint.
 */
 export function FileNameModal({
   open,
+  requiresFilePassword = false,
   onClose,
   folder,
   moduleName,
@@ -70,6 +74,7 @@ export function FileNameModal({
   const [match, setMatch] = useState<FileDto | null>(null)
   const [action, setAction] = useState<'view' | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [filePassword, setFilePassword] = useState('')
   const [viewer, setViewer] = useState<OpenedFileView | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const reqId = useRef(0)
@@ -119,6 +124,7 @@ export function FileNameModal({
     setPhase('input')
     setMatch(null)
     setActionError(null)
+    setFilePassword('')
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
@@ -127,7 +133,10 @@ export function FileNameModal({
     setAction('view')
     setActionError(null)
     try {
-      const opened = await api.files.openFile({ fileId: match.fileId, password: match.displayName })
+      const opened = await api.files.openFile({
+        fileId: match.fileId,
+        password: requiresFilePassword ? filePassword : null
+      })
       setViewer(opened)
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Could not open this file.')
@@ -186,7 +195,7 @@ export function FileNameModal({
               placeholder="Enter the exact file name"
             />
             <p className="mt-1.5 text-xs text-sv-text-muted">
-              Files in this folder unlock only when the name matches the vault record exactly.
+              Type the document name exactly as it was filed to retrieve it.
             </p>
 
             {/* Scanning progress: a moving gradient bar */}
@@ -256,6 +265,26 @@ export function FileNameModal({
               </div>
             </Card>
 
+            {requiresFilePassword ? (
+              <label className="mt-3 block space-y-1.5">
+                <span className="text-xs font-medium text-sv-text-muted">File password</span>
+                <Input
+                  type="password"
+                  value={filePassword}
+                  onChange={(e) => {
+                    setFilePassword(e.target.value)
+                    setActionError(null)
+                  }}
+                  autoComplete="off"
+                  placeholder="Set when this document was filed"
+                  error={Boolean(actionError)}
+                />
+                <span className="block text-xs text-sv-text-muted">
+                  This module requires a password to open its documents.
+                </span>
+              </label>
+            ) : null}
+
             {actionError ? (
               <p className="mt-3 text-xs text-sv-danger">{actionError}</p>
             ) : null}
@@ -264,7 +293,11 @@ export function FileNameModal({
               <Button type="button" variant="ghost" onClick={retry}>
                 Retrieve another
               </Button>
-              <Button type="button" disabled={action !== null} onClick={() => void runView()}>
+              <Button
+                type="button"
+                disabled={action !== null || (requiresFilePassword && !filePassword)}
+                onClick={() => void runView()}
+              >
                 {action === 'view' ? <Loader2 className="animate-spin" /> : <Eye />}
                 View
               </Button>

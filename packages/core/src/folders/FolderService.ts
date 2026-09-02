@@ -50,7 +50,8 @@ export class FolderService {
       code: row.code,
       name: row.name,
       sortOrder: row.sortOrder,
-      isSystem: row.isSystem
+      isSystem: row.isSystem,
+      requiresFilePassword: row.requiresFilePassword
     }))
   }
 
@@ -127,7 +128,8 @@ export class FolderService {
       code: row.code,
       name: row.name,
       sortOrder: row.sortOrder,
-      isSystem: row.isSystem
+      isSystem: row.isSystem,
+      requiresFilePassword: row.requiresFilePassword
     }
   }
 

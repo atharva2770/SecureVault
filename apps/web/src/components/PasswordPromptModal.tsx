@@ -49,7 +49,7 @@ export default function PasswordPromptModal({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="h-10 w-full rounded-lg border border-sv-border bg-sv-bg px-3 text-sm text-sv-text outline-none focus:border-sv-accent focus:ring-1 focus:ring-sv-accent"
-            placeholder="Same as the file name you set"
+            placeholder="Enter the file password"
             autoFocus
           />
         </label>

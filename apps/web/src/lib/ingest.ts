@@ -12,6 +12,8 @@ export interface StagedFile {
   addedAt: string
   status: 'encrypting' | 'error'
   error?: string
+  /** Set only for categories that require a per-file password. */
+  accessPassword?: string | null
 }
 
 export function isStagedId(id: string): boolean {

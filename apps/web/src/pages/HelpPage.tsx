@@ -19,9 +19,10 @@ export default function HelpPage(): React.JSX.Element {
         <section className="rounded-[var(--sv-radius)] border border-sv-border bg-sv-surface p-5">
           <h2 className="mb-2 text-sm font-semibold text-sv-text">File password</h2>
           <p className="text-sm leading-6 text-sv-text-muted">
-            When you upload, the display name is also the per-file access password (v1 policy). You
-            must enter that password again to view the file in the in-app viewer. Download, print, and
-            save are disabled. Encryption and decryption happen on the server; the browser never
+            Most modules need no file password — your folder permissions decide what you can open.
+            Modules that hold sensitive records, such as Accounts, ask for a password that is set when
+            the document is uploaded. That password is chosen by the uploader; it is never the file
+            name, and it cannot be recovered if lost. Download, print, and save are disabled. Encryption and decryption happen on the server; the browser never
             receives keys. Files must be uploaded through this web app — files left over from the old
             desktop app cannot be opened and should be uploaded again.
           </p>

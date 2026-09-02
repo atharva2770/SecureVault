@@ -196,7 +196,11 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         displayName: upload.fields.displayName || multipartValue(uploaded.fields, 'displayName'),
         categoryId:
           upload.fields.categoryId || multipartValue(uploaded.fields, 'categoryId') || undefined,
-        folderId: upload.fields.folderId || multipartValue(uploaded.fields, 'folderId') || undefined
+        folderId: upload.fields.folderId || multipartValue(uploaded.fields, 'folderId') || undefined,
+        accessPassword:
+          upload.fields.accessPassword ||
+          multipartValue(uploaded.fields, 'accessPassword') ||
+          undefined
       })
       if (!parsed.success) {
         if (body.readable) await drainStream(body)
@@ -212,6 +216,7 @@ export async function registerFileRoutes(app: FastifyInstance): Promise<void> {
         originalFileName: uploaded.filename || 'upload.bin',
         mimeType: uploaded.mimetype || null,
         body,
+        accessPassword: parsed.data.accessPassword ?? null,
         maxBytes: apiConfig.maxUploadBytes
       })
 

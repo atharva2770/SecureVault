@@ -26,7 +26,8 @@ export const folderSearchQuerySchema = z.strictObject({
 })
 
 export const downloadFileBodySchema = z.strictObject({
-  password: z.string().min(1).max(1000),
+  /** Only sent for categories that require a per-file password. */
+  password: z.string().min(1).max(1000).optional(),
   intent: z.enum(['view', 'copy', 'open', 'download']).optional()
 })
 
@@ -41,5 +42,7 @@ export const renameFileBodySchema = z.strictObject({
 export const uploadFieldsSchema = z.strictObject({
   displayName: displayNameSchema,
   categoryId: idSchema.optional(),
-  folderId: idSchema
+  folderId: idSchema,
+  /** Required only when the destination category opts in. Never the file name. */
+  accessPassword: z.string().min(8).max(1000).optional()
 })

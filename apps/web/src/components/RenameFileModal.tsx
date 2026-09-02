@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, Pencil } from 'lucide-react'
 
 import type { FileDto } from '@securevault/domain'
@@ -27,7 +27,6 @@ export default function RenameFileModal({
 
   const trimmed = displayName.trim()
   const canSubmit = trimmed.length > 0 && trimmed !== file.displayName && !submitting
-  const passwordHint = useMemo(() => trimmed || '—', [trimmed])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -45,7 +44,7 @@ export default function RenameFileModal({
         </div>
 
         <label className="mb-3 block space-y-1.5">
-          <span className="text-xs font-medium text-sv-text-muted">New name (also the password)</span>
+          <span className="text-xs font-medium text-sv-text-muted">New name</span>
           <input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -59,8 +58,7 @@ export default function RenameFileModal({
         </label>
 
         <div className="mb-3 rounded-lg border border-sv-border bg-sv-bg/70 px-3 py-2 text-xs text-sv-text-muted">
-          After rename, the access password will be:{' '}
-          <span className="font-semibold text-sv-text">{passwordHint}</span>
+          Renaming does not change the file password.
         </div>
 
         {error ? <p className="mb-3 text-xs text-sv-danger">{error}</p> : null}

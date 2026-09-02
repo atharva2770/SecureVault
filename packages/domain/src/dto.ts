@@ -47,6 +47,8 @@ export interface FileCategoryDto {
   name: string
   sortOrder: number
   isSystem: boolean
+  /** When true, files here need their own password on open; otherwise the ACL governs. */
+  requiresFilePassword: boolean
 }
 
 export interface FileDto {
@@ -100,7 +102,7 @@ export interface FolderRightsDto {
 
 export interface AddFilePayload {
   sourcePath: string
-  /** Vault display name — also becomes the per-file access password (v1). */
+  /** Vault display name. Independent of the access password. */
   displayName: string
   categoryId: string
   folderId?: string | null
@@ -134,7 +136,7 @@ export interface CopyFilePayload {
   targetFolderId: string
 }
 
-/** TEMP: rename — vault display name (also the v1 file password). */
+/** Rename a file. The access password is unaffected. */
 export interface RenameFilePayload {
   fileId: string
   displayName: string
@@ -142,7 +144,8 @@ export interface RenameFilePayload {
 
 export interface PasswordFilePayload {
   fileId: string
-  password: string
+  /** Omitted for categories where the folder ACL is the only access control. */
+  password?: string | null
 }
 
 export interface GetFileResult {
