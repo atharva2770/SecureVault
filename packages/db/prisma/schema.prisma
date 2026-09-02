@@ -36,6 +36,9 @@ model FileCategory {
   name       String   @map("Name") @db.NVarChar(100)
   sortOrder  Int      @default(0) @map("SortOrder")
   isSystem   Boolean  @default(true) @map("IsSystem")
+  /// When true, files in this category need their own access password on open.
+  /// When false the folder ACL is the only access control.
+  requiresFilePassword Boolean @default(false) @map("RequiresFilePassword")
   createdAt  DateTime @default(now()) @map("CreatedAt") @db.DateTime2
 
   folders Folder[]
@@ -76,7 +79,7 @@ model File {
   userId           String    @map("UserId") @db.UniqueIdentifier
   folderId         String?   @map("FolderId") @db.UniqueIdentifier
   categoryId       String?   @map("CategoryId") @db.UniqueIdentifier
-  /// User-facing vault name; also used as the share/open password (v1 policy).
+  /// User-facing vault name. Independent of the access password.
   displayName      String    @map("DisplayName") @db.NVarChar(500)
   originalFileName String    @map("OriginalFileName") @db.NVarChar(500)
   storedBlobPath   String    @map("StoredBlobPath") @db.NVarChar(1000)
@@ -87,7 +90,8 @@ model File {
   iv               Bytes     @map("IV") @db.VarBinary(32)
   authTag          Bytes     @map("AuthTag") @db.VarBinary(32)
   /// Argon2id encoded hash of the per-file access password (never plaintext).
-  accessPasswordHash String  @map("AccessPasswordHash") @db.NVarChar(500)
+  /// Null means no per-file password — the folder ACL governs access.
+  accessPasswordHash String? @map("AccessPasswordHash") @db.NVarChar(500)
   source           String    @default("upload") @map("Source") @db.NVarChar(50)
   batchId          String?   @map("BatchId") @db.UniqueIdentifier
   version          Int       @default(1) @map("Version")
