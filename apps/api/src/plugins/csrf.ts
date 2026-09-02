@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 
 import { apiConfig } from '../config'
+import { slidingCookieMaxAgeSeconds } from '../session'
 
 /*
   Double-submit CSRF protection.
@@ -18,6 +19,20 @@ import { apiConfig } from '../config'
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const CSRF_HEADER = 'x-csrf-token'
+
+/**
+ * One source of truth for the cookie's attributes. `httpOnly` must stay false —
+ * the SPA reads this value from document.cookie to echo it back in the header.
+ */
+function csrfCookieOptions() {
+  return {
+    path: '/',
+    httpOnly: false,
+    sameSite: 'lax' as const,
+    secure: apiConfig.cookieSecure,
+    maxAge: slidingCookieMaxAgeSeconds()
+  }
+}
 
 function tokensMatch(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -35,13 +50,17 @@ export async function registerCsrf(app: FastifyInstance): Promise<void> {
     // initial GET /api/auth/session), so later unsafe requests can echo it.
     if (!existing) {
       const token = randomBytes(32).toString('hex')
-      reply.setCookie(apiConfig.csrfCookieName, token, {
-        path: '/',
-        httpOnly: false,
-        sameSite: 'lax',
-        secure: apiConfig.cookieSecure,
-        maxAge: Math.ceil(apiConfig.idleTimeoutMs / 1000)
-      })
+      reply.setCookie(apiConfig.csrfCookieName, token, csrfCookieOptions())
+    } else if (SAFE_METHODS.has(request.method)) {
+      // Slide the token's expiry the same way the session cookie slides. Without
+      // this the token dies mid-session and every mutating request starts failing
+      // with a 403 the user cannot clear — the check below compares against the
+      // OLD cookie, so the request that would refresh it is itself rejected.
+      // Kept in this hook (rather than exported for the auth guard to call) so it
+      // can never race the issue branch above: at preHandler time a brand new
+      // client still has no request cookie, and re-setting under the same cookie
+      // key would overwrite the token just issued.
+      reply.setCookie(apiConfig.csrfCookieName, existing, csrfCookieOptions())
     }
 
     if (SAFE_METHODS.has(request.method)) return

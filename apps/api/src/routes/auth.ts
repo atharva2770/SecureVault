@@ -68,7 +68,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           roles: result.roles,
           kek: result.kek
         })
-        setSessionCookie(reply, session.sessionId)
+        setSessionCookie(reply, session)
         const user = credentials.toUserDto(result.user, result.roles)
         return { user, session: sessionPayload(true, session) }
       } finally {
@@ -106,7 +106,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
           roles: result.roles,
           kek: result.kek
         })
-        setSessionCookie(reply, session.sessionId)
+        setSessionCookie(reply, session)
         const user = credentials.toUserDto(result.user, result.roles)
         return { user, session: sessionPayload(true, session) }
       } finally {

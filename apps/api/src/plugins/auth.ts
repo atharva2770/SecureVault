@@ -5,7 +5,11 @@ import { AccessControlService, AuditAction, bindAuditUser, recordAudit } from '@
 import { apiConfig } from '../config'
 import { HttpError } from '../httpErrors'
 import type { HttpSession } from '../session'
-import { httpSessions } from '../session'
+import {
+  httpSessions,
+  sessionCookieMaxAgeSeconds,
+  shouldRefreshSessionCookie
+} from '../session'
 
 /** Effective identity resolved once per request from the server-side rights model. */
 export interface RequestIdentity {
@@ -33,6 +37,9 @@ const PUBLIC_PATHS = new Set([
 ])
 
 const ADMIN_PREFIX = '/api/admin/'
+
+// No point re-signing a cookie for a session the handler is about to destroy.
+const LOGOUT_PATH = '/api/auth/logout'
 
 /*
   Lightweight probing monitor: counts 403s per user in a rolling window and
@@ -67,14 +74,14 @@ export function recordForbidden(userId: string | null | undefined, path: string)
   }
 }
 
-export function setSessionCookie(reply: FastifyReply, sessionId: string): void {
-  reply.setCookie(apiConfig.cookieName, sessionId, {
+export function setSessionCookie(reply: FastifyReply, session: HttpSession): void {
+  reply.setCookie(apiConfig.cookieName, session.sessionId, {
     path: '/',
     httpOnly: true,
     sameSite: 'lax',
     secure: apiConfig.cookieSecure,
     signed: true,
-    maxAge: Math.ceil(apiConfig.idleTimeoutMs / 1000)
+    maxAge: sessionCookieMaxAgeSeconds(session)
   })
 }
 
@@ -108,6 +115,18 @@ export async function registerAuthGuard(app: FastifyInstance): Promise<void> {
     const session = httpSessions.touch(readSessionId(request))
     request.vaultSession = session
     bindAuditUser(session?.userId)
+
+    // The server slides `lastActivityAt` on every request; without this the
+    // browser's copy still expires a fixed interval after login and an actively
+    // working user is signed out mid-task. Re-issuing is idempotent — the cookie
+    // signature is a plain HMAC of the id, so the value is byte-identical and the
+    // session id is never rotated. Runs before the public-path return so a
+    // request that carries a live session slides it whatever route it hit.
+    // The absolute cap is untouched: HttpSessionStore.get() still owns expiry.
+    if (session && path !== LOGOUT_PATH && shouldRefreshSessionCookie(session)) {
+      setSessionCookie(reply, session)
+      httpSessions.markCookieIssued(session.sessionId)
+    }
 
     if (PUBLIC_PATHS.has(path)) {
       return
