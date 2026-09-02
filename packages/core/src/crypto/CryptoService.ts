@@ -23,6 +23,29 @@ export const ARGON2_TIME_COST = 3
 /** Default Argon2id parallelism. */
 export const ARGON2_PARALLELISM = 4
 
+/*
+  Per-file access passwords are cheaper than logins on purpose.
+
+  A login KDF faces an offline attacker holding the database, so it carries the
+  64 MiB cost above. A per-file password is already behind an authenticated
+  session, an ACL check and a rate limit, and it is verified on every document
+  click — login-grade cost there buys almost nothing and stalls the shared libuv
+  threadpool for every other reader. These are the OWASP Argon2id baseline.
+
+  Argon2 encodes its parameters in the PHC hash string, so verification needs no
+  parameter constants at all: hashes written at the old 64 MiB settings keep
+  verifying unchanged, with no re-hash and no migration.
+*/
+
+/** Argon2id memory cost in KiB for per-file access passwords (19 MiB). */
+export const FILE_PASSWORD_MEMORY_COST_KIB = 19456
+
+/** Argon2id time (iteration) cost for per-file access passwords. */
+export const FILE_PASSWORD_TIME_COST = 2
+
+/** Argon2id parallelism for per-file access passwords. */
+export const FILE_PASSWORD_PARALLELISM = 1
+
 /** AES-256 key length in bytes. */
 export const AES_256_KEY_BYTES = 32
 
@@ -389,9 +412,9 @@ export class CryptoService {
     return kdfSemaphore.run(() =>
       argon2.hash(password, {
         type: argon2.argon2id,
-        memoryCost: ARGON2_MEMORY_COST_KIB,
-        timeCost: ARGON2_TIME_COST,
-        parallelism: ARGON2_PARALLELISM
+        memoryCost: FILE_PASSWORD_MEMORY_COST_KIB,
+        timeCost: FILE_PASSWORD_TIME_COST,
+        parallelism: FILE_PASSWORD_PARALLELISM
       })
     )
   }
