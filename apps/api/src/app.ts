@@ -48,7 +48,9 @@ function envPositiveInt(name: string, fallback: number): number {
 function rateLimitMax(group: string): number {
   switch (group) {
     case 'auth':
-      return 30
+      // No human signs in ten times a minute. The per-username backoff in
+      // plugins/rateLimit.ts is unchanged; this is the coarse per-IP backstop.
+      return 10
     case 'admin':
       return 120
     case 'download':

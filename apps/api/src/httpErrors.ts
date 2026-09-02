@@ -1,6 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { PasswordPolicyError, UnsupportedUploadTypeError, UploadTooLargeError } from '@securevault/core'
+import {
+  CapacityError,
+  PasswordPolicyError,
+  UnsupportedUploadTypeError,
+  UploadTooLargeError
+} from '@securevault/core'
 
 export class HttpError extends Error {
   readonly statusCode: number
@@ -128,6 +133,8 @@ export interface PublicError {
   statusCode: number
   clientMessage: string
   detail: string
+  /** Populated for shed load so the caller can set Retry-After. */
+  retryAfterSeconds?: number
 }
 
 export function toPublicError(error: unknown): PublicError {
@@ -140,6 +147,16 @@ export function toPublicError(error: unknown): PublicError {
           ? detail
           : (PUBLIC_BY_STATUS[error.statusCode] ?? PUBLIC_BY_STATUS[400])
     return { statusCode: error.statusCode, clientMessage, detail }
+  }
+
+  if (error instanceof CapacityError) {
+    // Shed load, not a client mistake — say so without naming the subsystem.
+    return {
+      statusCode: 503,
+      clientMessage: 'Server is busy. Please try again shortly.',
+      detail: error.message,
+      retryAfterSeconds: error.retryAfterSeconds
+    }
   }
 
   if (error instanceof PasswordPolicyError) {
@@ -193,6 +210,9 @@ export function toHttpError(error: unknown): HttpError {
 export function sendError(reply: FastifyReply, error: unknown): FastifyReply {
   const mapped = toPublicError(error)
   reply.log.warn({ err: error, detail: mapped.detail }, 'request failed')
+  if (mapped.retryAfterSeconds !== undefined) {
+    reply.header('Retry-After', mapped.retryAfterSeconds)
+  }
   return reply.status(mapped.statusCode).send({ error: mapped.clientMessage })
 }
 

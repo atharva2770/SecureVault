@@ -1,6 +1,8 @@
 export { secureZero, sha256Hex, safeEqualHex } from './utils/secure'
 export { assertPathInsideRoot } from './utils/pathContainment'
 export { escapeLikePattern } from './utils/likeEscape'
+export { Semaphore, CapacityError, kdfSemaphore, KDF_MAX_QUEUE } from './utils/Semaphore'
+export type { SemaphoreOptions } from './utils/Semaphore'
 
 export {
   CryptoService,

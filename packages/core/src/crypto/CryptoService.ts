@@ -12,6 +12,8 @@ import { pipeline } from 'node:stream/promises'
 import { Transform, type Readable, type Writable } from 'node:stream'
 import * as argon2 from 'argon2'
 
+import { CapacityError, kdfSemaphore } from '../utils/Semaphore'
+
 /** Default Argon2id memory cost in KiB (64 MiB). */
 export const ARGON2_MEMORY_COST_KIB = 65536
 
@@ -125,15 +127,20 @@ export class CryptoService {
       )
     }
 
-    const kek = await argon2.hash(password, {
-      type: argon2.argon2id,
-      salt,
-      memoryCost: merged.memoryCost,
-      timeCost: merged.timeCost,
-      parallelism: merged.parallelism,
-      hashLength: merged.hashLength,
-      raw: true
-    })
+    // Bounded concurrency, not reduced cost: every derivation still costs the
+    // full 64 MiB. The gate stops an unauthenticated flood from allocating one
+    // of those per in-flight request.
+    const kek = await kdfSemaphore.run(() =>
+      argon2.hash(password, {
+        type: argon2.argon2id,
+        salt,
+        memoryCost: merged.memoryCost,
+        timeCost: merged.timeCost,
+        parallelism: merged.parallelism,
+        hashLength: merged.hashLength,
+        raw: true
+      })
+    )
 
     return Buffer.from(kek)
   }
@@ -379,12 +386,14 @@ export class CryptoService {
     if (!password || password.trim().length < 1) {
       throw new Error('Access password is required.')
     }
-    return argon2.hash(password, {
-      type: argon2.argon2id,
-      memoryCost: ARGON2_MEMORY_COST_KIB,
-      timeCost: ARGON2_TIME_COST,
-      parallelism: ARGON2_PARALLELISM
-    })
+    return kdfSemaphore.run(() =>
+      argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: ARGON2_MEMORY_COST_KIB,
+        timeCost: ARGON2_TIME_COST,
+        parallelism: ARGON2_PARALLELISM
+      })
+    )
   }
 
   /**
@@ -393,8 +402,10 @@ export class CryptoService {
   async verifyAccessPassword(password: string, encodedHash: string): Promise<boolean> {
     if (!password || !encodedHash) return false
     try {
-      return await argon2.verify(encodedHash, password)
-    } catch {
+      return await kdfSemaphore.run(() => argon2.verify(encodedHash, password))
+    } catch (error) {
+      // Shedding load must not read as "wrong password" — let the caller map it.
+      if (error instanceof CapacityError) throw error
       return false
     }
   }

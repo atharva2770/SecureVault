@@ -8,6 +8,7 @@ import { CryptoService } from '../crypto/CryptoService'
 import { enforcePasswordPolicy } from './PasswordPolicy'
 import { RbacService } from '../rbac/RbacService'
 import { safeEqualHex, secureZero, sha256Hex } from '../utils/secure'
+import { CapacityError } from '../utils/Semaphore'
 
 interface StoredAuthParams extends Argon2Params {
   kekVerifier: string
@@ -287,8 +288,13 @@ export class AuthCredentials {
       const salt = this.crypto.generateSalt(32)
       const kek = await this.crypto.deriveKEK(password || 'x', salt)
       secureZero(kek)
-    } catch {
-      /* ignore — this path only exists to spend time */
+    } catch (error) {
+      // Load shedding must surface here exactly as it would on the real path.
+      // Swallowing it would make an unknown username answer 401 immediately
+      // while a known one answered 503 — a fresh enumeration oracle that only
+      // shows up under load. Every other failure is ignored: this call exists
+      // solely to spend the same time the real derivation would.
+      if (error instanceof CapacityError) throw error
     }
   }
 
