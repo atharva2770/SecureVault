@@ -2,16 +2,23 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { createPortal } from 'react-dom'
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist'
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { ChevronLeft, ChevronRight, EyeOff, Loader2, Minus, Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, EyeOff, Loader2, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import {
+  detectBitmapRotation,
+  detectPdfPageRotation,
+  wrapRotation,
+  type PageRotation
+} from '@/lib/drawing-orientation'
 import { DOCUMENT_WATERMARK } from '@/lib/watermark'
 
 GlobalWorkerOptions.workerSrc = pdfWorkerSrc
 
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 4
-const ZOOM_STEP = 0.25
+/** Small nudge for +/− buttons. Wheel and the slider are continuous 50–400%. */
+const ZOOM_NUDGE = 0.05
 /** Backing-store floor so scanned pages stay sharp on 1× Windows displays. */
 const MIN_OUTPUT_SCALE = 2
 const MAX_OUTPUT_SCALE = 3
@@ -60,8 +67,14 @@ function paintWatermark(ctx: CanvasRenderingContext2D, width: number, height: nu
   ctx.restore()
 }
 
-function roundZoom(value: number): number {
-  return Math.round(value * 100) / 100
+function clampZoom(value: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(value * 100) / 100))
+}
+
+function zoomFromWheel(current: number, event: WheelEvent): number {
+  const pixels =
+    event.deltaMode === 1 ? event.deltaY * 16 : event.deltaMode === 2 ? event.deltaY * 400 : event.deltaY
+  return clampZoom(current * Math.exp(-pixels * 0.002))
 }
 
 function clampScale(cssWidth: number, cssHeight: number, scale: number): number {
@@ -75,6 +88,7 @@ async function drawPdfPage(
   container: HTMLElement,
   pageNumber: number,
   zoom: number,
+  rotation: PageRotation,
   watermark: string,
   signal: AbortSignal
 ): Promise<void> {
@@ -82,10 +96,12 @@ async function drawPdfPage(
   const page = await pdf.getPage(pageNumber)
   if (signal.aborted) return
 
-  const unscaled = page.getViewport({ scale: 1 })
+  const nativeRotate = page.rotate || 0
+  const rotationAbs = wrapRotation(nativeRotate + rotation)
+  const unscaled = page.getViewport({ scale: 1, rotation: rotationAbs })
   const cssWidth = Math.max(280, container.clientWidth || 960)
   const cssScale = (cssWidth / unscaled.width) * zoom
-  const viewport = page.getViewport({ scale: cssScale })
+  const viewport = page.getViewport({ scale: cssScale, rotation: rotationAbs })
   const sx = clampScale(viewport.width, viewport.height, outputScale())
 
   const canvas = document.createElement('canvas')
@@ -129,13 +145,17 @@ function drawImage(
   bitmap: ImageBitmap,
   container: HTMLElement,
   zoom: number,
+  rotation: PageRotation,
   watermark: string
 ): void {
   container.replaceChildren()
+  const swapped = rotation === 90 || rotation === 270
+  const contentW = swapped ? bitmap.height : bitmap.width
+  const contentH = swapped ? bitmap.width : bitmap.height
   const cssWidth = Math.max(280, container.clientWidth || 960) * zoom
-  const fit = cssWidth / bitmap.width
-  const cssW = Math.max(1, Math.round(bitmap.width * fit))
-  const cssH = Math.max(1, Math.round(bitmap.height * fit))
+  const fit = cssWidth / contentW
+  const cssW = Math.max(1, Math.round(contentW * fit))
+  const cssH = Math.max(1, Math.round(contentH * fit))
   const sx = clampScale(cssW, cssH, outputScale())
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(cssW * sx))
@@ -147,7 +167,13 @@ function drawImage(
   if (ctx) {
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    ctx.save()
+    ctx.translate(canvas.width / 2, canvas.height / 2)
+    ctx.rotate((rotation * Math.PI) / 180)
+    const drawW = swapped ? canvas.height : canvas.width
+    const drawH = swapped ? canvas.width : canvas.height
+    ctx.drawImage(bitmap, -drawW / 2, -drawH / 2, drawW, drawH)
+    ctx.restore()
     paintWatermark(ctx, canvas.width, canvas.height, watermark)
   }
   container.appendChild(canvas)
@@ -176,13 +202,19 @@ export function SecureFileViewer({
   const [hidden, setHidden] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const [renderZoom, setRenderZoom] = useState(1)
   const [pageNumber, setPageNumber] = useState(1)
   const [pageCount, setPageCount] = useState(1)
+  const [rotation, setRotation] = useState<PageRotation>(0)
   const zoomRef = useRef(1)
   zoomRef.current = zoom
 
   const bumpZoom = useCallback((next: number) => {
-    setZoom(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, roundZoom(next))))
+    setZoom(clampZoom(next))
+  }, [])
+
+  const bumpRotation = useCallback((delta: number) => {
+    setRotation((current) => wrapRotation(current + delta))
   }, [])
 
   const onPanPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -221,17 +253,22 @@ export function SecureFileViewer({
       const mod = event.ctrlKey || event.metaKey
       if (mod && (key === '=' || key === '+' || event.key === '+')) {
         event.preventDefault()
-        bumpZoom(zoomRef.current + ZOOM_STEP)
+        bumpZoom(zoomRef.current + ZOOM_NUDGE)
         return
       }
       if (mod && key === '-') {
         event.preventDefault()
-        bumpZoom(zoomRef.current - ZOOM_STEP)
+        bumpZoom(zoomRef.current - ZOOM_NUDGE)
         return
       }
       if (mod && key === '0') {
         event.preventDefault()
         setZoom(1)
+        return
+      }
+      if (!mod && key === 'r') {
+        event.preventDefault()
+        setRotation((current) => wrapRotation(current + (event.shiftKey ? -90 : 90)))
         return
       }
       if (!mod && event.key === 'ArrowLeft') {
@@ -276,8 +313,7 @@ export function SecureFileViewer({
     const onWheel = (event: WheelEvent): void => {
       if (!(event.ctrlKey || event.metaKey)) return
       event.preventDefault()
-      const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
-      bumpZoom(zoomRef.current + delta)
+      bumpZoom(zoomFromWheel(zoomRef.current, event))
     }
 
     window.addEventListener('keydown', guardKeys, true)
@@ -304,8 +340,10 @@ export function SecureFileViewer({
   useEffect(() => {
     if (!open) {
       setZoom(1)
+      setRenderZoom(1)
       setPageNumber(1)
       setPageCount(1)
+      setRotation(0)
       setStatus('loading')
       setHidden(false)
       setDragging(false)
@@ -319,6 +357,7 @@ export function SecureFileViewer({
     setStatus('loading')
     setPageNumber(1)
     setPageCount(1)
+    setRotation(0)
     pdfRef.current = null
     if (bitmapRef.current) {
       bitmapRef.current.close()
@@ -337,6 +376,12 @@ export function SecureFileViewer({
           }
           pdfRef.current = pdf
           if (!ac.signal.aborted) {
+            const extra = await detectPdfPageRotation(pdf, 1, ac.signal)
+            if (ac.signal.aborted) {
+              await pdf.cleanup()
+              return
+            }
+            setRotation(extra)
             setPageCount(pdf.numPages)
             setPageNumber(1)
             setStatus('ready')
@@ -349,6 +394,7 @@ export function SecureFileViewer({
           }
           bitmapRef.current = bitmap
           if (!ac.signal.aborted) {
+            setRotation(detectBitmapRotation(bitmap))
             setPageCount(1)
             setPageNumber(1)
             setStatus('ready')
@@ -372,6 +418,11 @@ export function SecureFileViewer({
   }, [open, blob, fileName, mimeType])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setRenderZoom(zoom), 80)
+    return () => window.clearTimeout(timer)
+  }, [zoom])
+
+  useEffect(() => {
     if (!open || status !== 'ready') return
     const container = pagesRef.current
     if (!container) return
@@ -380,14 +431,22 @@ export function SecureFileViewer({
     const bitmap = bitmapRef.current
     void (async () => {
       try {
-        if (pdf) await drawPdfPage(pdf, container, pageNumber, zoom, watermark, ac.signal)
-        else if (bitmap) drawImage(bitmap, container, zoom, watermark)
+        if (pdf) await drawPdfPage(pdf, container, pageNumber, renderZoom, rotation, watermark, ac.signal)
+        else if (bitmap) drawImage(bitmap, container, renderZoom, rotation, watermark)
       } catch {
         /* keep last good frame */
       }
     })()
     return () => ac.abort()
-  }, [open, status, zoom, pageNumber, watermark, blob])
+  }, [open, status, renderZoom, pageNumber, rotation, watermark, blob])
+
+  useEffect(() => {
+    const el = pagesRef.current
+    if (!el) return
+    const preview = renderZoom === 0 ? 1 : zoom / renderZoom
+    el.style.transform = Math.abs(preview - 1) < 0.01 ? '' : `scale(${preview})`
+    el.style.transformOrigin = 'top center'
+  }, [zoom, renderZoom])
 
   if (!open) return null
 
@@ -444,13 +503,24 @@ export function SecureFileViewer({
               className="size-8 text-white hover:bg-white/10"
               disabled={zoom <= ZOOM_MIN}
               aria-label="Zoom out"
-              onClick={() => bumpZoom(zoom - ZOOM_STEP)}
+              onClick={() => bumpZoom(zoom - ZOOM_NUDGE)}
             >
               <Minus className="size-4" />
             </Button>
+            <input
+              type="range"
+              min={50}
+              max={400}
+              step={1}
+              value={Math.round(zoom * 100)}
+              aria-label="Zoom"
+              title="Zoom 50%–400%"
+              className="h-8 w-24 cursor-pointer accent-white sm:w-32"
+              onChange={(event) => bumpZoom(Number(event.target.value) / 100)}
+            />
             <button
               type="button"
-              className="min-w-14 rounded px-1 text-center text-xs tabular-nums text-white/80 hover:bg-white/10"
+              className="min-w-12 rounded px-1 text-center text-xs tabular-nums text-white/80 hover:bg-white/10"
               title="Reset to fit width"
               onClick={() => setZoom(1)}
             >
@@ -463,14 +533,41 @@ export function SecureFileViewer({
               className="size-8 text-white hover:bg-white/10"
               disabled={zoom >= ZOOM_MAX}
               aria-label="Zoom in"
-              onClick={() => bumpZoom(zoom + ZOOM_STEP)}
+              onClick={() => bumpZoom(zoom + ZOOM_NUDGE)}
             >
               <Plus className="size-4" />
             </Button>
           </div>
         ) : null}
+        {status === 'ready' ? (
+          <div className="flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 p-0.5">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-8 text-white hover:bg-white/10"
+              aria-label="Rotate left"
+              title="Rotate left (Shift+R)"
+              onClick={() => bumpRotation(-90)}
+            >
+              <RotateCcw className="size-4" />
+            </Button>
+            <span className="min-w-10 text-center text-xs tabular-nums text-white/80">{rotation}°</span>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-8 text-white hover:bg-white/10"
+              aria-label="Rotate right"
+              title="Rotate right (R)"
+              onClick={() => bumpRotation(90)}
+            >
+              <RotateCw className="size-4" />
+            </Button>
+          </div>
+        ) : null}
         <p className="hidden text-2xs text-white/50 lg:block">
-          View only · {DOCUMENT_WATERMARK} · Drag to pan · Scroll · Ctrl + scroll to zoom
+          View only · {DOCUMENT_WATERMARK} · Drag to pan · R to rotate
         </p>
         <Button type="button" size="sm" variant="secondary" className="h-9 gap-1.5" onClick={onClose}>
           <X className="size-4" />
