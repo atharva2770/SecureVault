@@ -31,7 +31,15 @@ export interface VaultUploadInput {
   mimeType?: string | null
   body: Readable
   maxBytes?: number
+  /**
+   * Per-file access password. Required when the destination category opts in,
+   * ignored otherwise. Never derived from the display name.
+   */
+  accessPassword?: string | null
 }
+
+/** Shortest password accepted for a per-file access password. */
+export const MIN_FILE_PASSWORD_LENGTH = 8
 
 export interface VaultDownloadResult {
   fileId: string
@@ -82,6 +90,12 @@ export class VaultFileService {
     })
     if (!category) throw new Error('Invalid file type.')
 
+    // Reject before spending any work on the upload body.
+    const suppliedPassword = input.accessPassword?.trim() || ''
+    if (category.requiresFilePassword && suppliedPassword.length < MIN_FILE_PASSWORD_LENGTH) {
+      throw new Error('A file password is required for this category.')
+    }
+
     const categoryId = folder.categoryId
     const folderRel = await relativePathForFolderId(folderId)
     await ensureVaultFolderDirForId(folderId)
@@ -90,7 +104,10 @@ export class VaultFileService {
     const sniffed = await inspectUpload(input.body, originalFileName)
     const body = limitReadable(sniffed.body, input.maxBytes ?? 100 * 1024 * 1024)
     const mimeType = sniffed.mimeType
-    const accessPasswordHash = await this.crypto.hashAccessPassword(displayName)
+    // Null unless the category opts in — the display name is no longer a credential.
+    const accessPasswordHash = category.requiresFilePassword
+      ? await this.crypto.hashAccessPassword(suppliedPassword)
+      : null
     const key = this.blobs.objectKey(userId, fileId, folderRel)
     const destPath = await this.blobs.prepareWrite(key)
     const uri = this.blobs.toUri(key)
@@ -154,13 +171,15 @@ export class VaultFileService {
   async downloadToTemp(
     userId: string,
     fileId: string,
-    password: string,
+    password?: string | null,
     options?: { kek?: Buffer | null; intent?: 'view' | 'copy' }
   ): Promise<VaultDownloadResult> {
     const right = options?.intent === 'copy' ? 'copy' : 'view'
     await this.acl.requireFile(fileId, right, userId)
+    // requireAccessibleFile already includes the category, so the policy costs
+    // no extra query.
     const record = await this.requireAccessibleFile(fileId)
-    await this.assertFilePassword(record.accessPasswordHash, password)
+    await this.assertFilePassword(record, record.category, password)
 
     const encPath = await resolveCiphertextPath(record.storedBlobPath, this.blobs)
 
@@ -369,6 +388,8 @@ export class VaultFileService {
           wrappedDEK: existing.wrappedDEK,
           iv: existing.iv,
           authTag: existing.authTag,
+          // Correct now that the password is not tied to the name: the copy is
+          // renamed on collision but opens with the source's credential (F6).
           accessPasswordHash: existing.accessPasswordHash,
           source: WEB_FILE_SOURCE,
           version: 1
@@ -422,13 +443,11 @@ export class VaultFileService {
       }
     }
 
-    const accessPasswordHash = await this.crypto.hashAccessPassword(displayName)
-
+    // The access password is independent of the name, so renaming leaves it alone.
     const record = await this.db.prisma.file.update({
       where: { fileId: existing.fileId },
       data: {
         displayName,
-        accessPasswordHash,
         updatedAt: new Date()
       },
       include: { category: true }
@@ -526,11 +545,53 @@ export class VaultFileService {
     })
   }
 
+  /**
+   * Enforces the per-file password only where category policy asks for it.
+   *
+   * The ACL check in {@link downloadToTemp} has already run by this point and is
+   * the real access control. This gate is a second factor for categories that
+   * opt in, and nothing at all for the rest.
+   *
+   * Fails closed in both directions: a category that requires a password but has
+   * no hash stored is a data error and is denied rather than waved through, and
+   * a file whose category cannot be resolved is treated as requiring one.
+   */
   private async assertFilePassword(
-    accessPasswordHash: string,
-    password: string
+    record: { fileId: string; categoryId: string | null; accessPasswordHash: string | null },
+    category: { requiresFilePassword: boolean } | null | undefined,
+    password: string | null | undefined
   ): Promise<void> {
-    const ok = await this.crypto.verifyAccessPassword(password, accessPasswordHash)
+    if (!category) {
+      // File.categoryId is nullable, so policy is genuinely unknown here.
+      console.error(
+        JSON.stringify({
+          level: 'security',
+          event: 'file_password_policy_unresolved',
+          fileId: record.fileId,
+          categoryId: record.categoryId
+        })
+      )
+      throw new Error('Incorrect file password.')
+    }
+
+    if (category.requiresFilePassword && !record.accessPasswordHash) {
+      // Never fall through to "no password needed" because the hash is missing.
+      console.error(
+        JSON.stringify({
+          level: 'security',
+          event: 'file_password_missing_for_required_category',
+          fileId: record.fileId,
+          categoryId: record.categoryId
+        })
+      )
+      throw new Error('Incorrect file password.')
+    }
+
+    // A hash on a file whose category has opted out is a control that is in
+    // force on existing data; honour it rather than silently dropping it.
+    if (!record.accessPasswordHash) return
+
+    const ok = await this.crypto.verifyAccessPassword(password ?? '', record.accessPasswordHash)
     if (!ok) {
       throw new Error('Incorrect file password.')
     }
