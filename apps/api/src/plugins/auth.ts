@@ -48,7 +48,34 @@ const LOGOUT_PATH = '/api/auth/logout'
 */
 const FORBIDDEN_WINDOW_MS = 5 * 60 * 1000
 const FORBIDDEN_ALERT_AT = 8
+const FORBIDDEN_SWEEP_INTERVAL_MS = 60_000
 const forbiddenHits = new Map<string, { count: number; firstAt: number; alerted: boolean }>()
+
+let forbiddenSweeper: ReturnType<typeof setInterval> | null = null
+
+/**
+ * Drops rows whose window has closed. `recordForbidden` already resets such a
+ * row on the next hit, so this only reclaims users who stopped probing and never
+ * came back — without it the map grows for the life of the process.
+ * Idempotent; `unref`'d so it never delays process exit.
+ */
+export function startForbiddenSweeper(): void {
+  if (forbiddenSweeper) return
+  forbiddenSweeper = setInterval(() => {
+    const now = Date.now()
+    for (const [userId, row] of forbiddenHits) {
+      if (now - row.firstAt > FORBIDDEN_WINDOW_MS) forbiddenHits.delete(userId)
+    }
+  }, FORBIDDEN_SWEEP_INTERVAL_MS)
+  forbiddenSweeper.unref()
+}
+
+export function stopForbiddenSweeper(): void {
+  if (forbiddenSweeper) clearInterval(forbiddenSweeper)
+  forbiddenSweeper = null
+}
+
+startForbiddenSweeper()
 
 export function recordForbidden(userId: string | null | undefined, path: string): void {
   if (!userId) return

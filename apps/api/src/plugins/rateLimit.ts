@@ -25,7 +25,9 @@ interface AttemptRow {
   lockedUntil: number
 }
 
-interface GuardOptions {
+const SWEEP_INTERVAL_MS = 60_000
+
+export interface GuardOptions {
   /** Failures allowed before backoff/lockout begins. */
   freeAttempts: number
   /** Backoff base (ms) multiplied by 2^(failures-free) once over the threshold. */
@@ -37,10 +39,36 @@ interface GuardOptions {
   label: string
 }
 
-class AttemptGuard {
+/** Exported only so tests can build a guard with their own windows. */
+export class AttemptGuard {
   private readonly rows = new Map<string, AttemptRow>()
 
   constructor(private readonly opts: GuardOptions) {}
+
+  /** Number of keys currently tracked. */
+  get size(): number {
+    return this.rows.size
+  }
+
+  /**
+   * Forgets keys that are neither locked nor still inside their failure window.
+   * The cleanup in `assert()` only runs for a key that has locked at least once,
+   * so a key that never passed `freeAttempts` was kept for the life of the
+   * process. Sweeping applies the same window `assert()` already uses, so a key
+   * below the threshold now resets on idle instead of accumulating forever.
+   * A key inside an active lockout is never dropped — that would hand the
+   * caller a free pass.
+   */
+  sweep(now = Date.now()): number {
+    let dropped = 0
+    for (const [key, row] of this.rows) {
+      if (row.lockedUntil > now) continue
+      if (now - row.firstFailureAt <= this.opts.windowMs) continue
+      this.rows.delete(key)
+      dropped += 1
+    }
+    return dropped
+  }
 
   assert(key: string): void {
     const row = this.rows.get(key)
@@ -106,6 +134,26 @@ const registerByIp = new AttemptGuard({
   maxLockMs: 30 * 60 * 1000,
   windowMs: 60 * 60 * 1000
 })
+
+const guards = [loginByIp, loginByUser, registerByIp]
+
+let sweeper: ReturnType<typeof setInterval> | null = null
+
+/** Idempotent; `unref`'d so it never delays process exit. */
+export function startAttemptGuardSweeper(): void {
+  if (sweeper) return
+  sweeper = setInterval(() => {
+    for (const guard of guards) guard.sweep()
+  }, SWEEP_INTERVAL_MS)
+  sweeper.unref()
+}
+
+export function stopAttemptGuardSweeper(): void {
+  if (sweeper) clearInterval(sweeper)
+  sweeper = null
+}
+
+startAttemptGuardSweeper()
 
 function userKey(username: string): string {
   return username.trim().toLowerCase() || '(empty)'
