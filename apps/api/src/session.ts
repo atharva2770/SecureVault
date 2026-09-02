@@ -36,6 +36,16 @@ const sessions = new Map<string, HttpSession>()
 export const COOKIE_REFRESH_FRACTION = 0.25
 const COOKIE_CLOCK_SKEW_MS = 60_000
 
+/**
+ * Deliberately a constant and not config: this module is imported by unit tests
+ * that never load the environment, and reading apiConfig at construction time
+ * would make importing it throw.
+ */
+const SWEEP_INTERVAL_MS = 60_000
+
+/** Concurrent sessions one user may hold before the oldest is revoked. */
+const MAX_SESSIONS_PER_USER = 5
+
 function toMaxAgeSeconds(ms: number): number {
   // The cookie serializer rejects a non-integer maxAge and treats <= 0 as a
   // deletion, so never emit either.
@@ -72,11 +82,66 @@ export function shouldRefreshSessionCookie(session: HttpSession, now = Date.now(
 export class HttpSessionStore {
   private static instance: HttpSessionStore | null = null
 
+  private sweeper: ReturnType<typeof setInterval> | null = null
+
+  private constructor() {
+    this.startSweeper()
+  }
+
   static getInstance(): HttpSessionStore {
     if (!HttpSessionStore.instance) {
       HttpSessionStore.instance = new HttpSessionStore()
     }
     return HttpSessionStore.instance
+  }
+
+  /**
+   * Starts the periodic sweep. Idempotent, and `unref`'d so it never holds the
+   * event loop open or delays process exit.
+   */
+  startSweeper(): void {
+    if (this.sweeper) return
+    this.sweeper = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS)
+    this.sweeper.unref()
+  }
+
+  /**
+   * Stops the periodic sweep. This is the method the graceful-shutdown handler
+   * (P0-06) should call. Always clears the handle, so a stop under swapped
+   * timers cannot leave the store believing it still has a live sweeper.
+   */
+  stopSweeper(): void {
+    if (this.sweeper) clearInterval(this.sweeper)
+    this.sweeper = null
+  }
+
+  /** Live session count — for tests and the readiness endpoint. */
+  size(): number {
+    return sessions.size
+  }
+
+  /**
+   * Expiry used to be evaluated only inside `get()`, so a session whose owner
+   * simply closed their browser was never revisited: the entry and its KEK
+   * stayed resident until the process restarted. Sweeping makes `drop()` — and
+   * with it `secureZero` — reachable without a request.
+   */
+  private sweep(now = Date.now()): number {
+    let dropped = 0
+    try {
+      const idleMs = apiConfig.idleTimeoutMs
+      const absoluteMs = apiConfig.sessionAbsoluteMaxMs
+      for (const [id, session] of sessions) {
+        if (now - session.lastActivityAt > idleMs || now - session.createdAt > absoluteMs) {
+          this.drop(id)
+          dropped += 1
+        }
+      }
+    } catch {
+      // A background timer must never take the process down. `get()` still
+      // enforces both deadlines on the next request either way.
+    }
+    return dropped
   }
 
   create(
@@ -92,7 +157,27 @@ export class HttpSessionStore {
       kek: input.kek ? Buffer.from(input.kek) : undefined
     }
     sessions.set(session.sessionId, session)
+    this.enforceUserSessionCap(session.userId)
     return session
+  }
+
+  /**
+   * Bounds the map against a scripted login loop: past the cap, this user's
+   * oldest session is revoked (and its KEK zeroed) to make room.
+   */
+  private enforceUserSessionCap(userId: string): void {
+    const mine: HttpSession[] = []
+    for (const session of sessions.values()) {
+      if (session.userId === userId) mine.push(session)
+    }
+    if (mine.length <= MAX_SESSIONS_PER_USER) return
+
+    // Map iteration is insertion-ordered and the sort is stable, so sessions
+    // created in the same millisecond still fall out in creation order.
+    mine.sort((a, b) => a.createdAt - b.createdAt)
+    for (const stale of mine.slice(0, mine.length - MAX_SESSIONS_PER_USER)) {
+      this.drop(stale.sessionId)
+    }
   }
 
   /** Records that the browser was just handed a fresh cookie for this session. */
@@ -152,9 +237,22 @@ export class HttpSessionStore {
     return revoked
   }
 
+  /** Revokes every session and zeroes every KEK. */
+  destroyAll(): number {
+    const revoked = sessions.size
+    for (const id of [...sessions.keys()]) {
+      this.drop(id)
+    }
+    return revoked
+  }
+
   private drop(sessionId: string): void {
     const session = sessions.get(sessionId)
-    if (session?.kek) secureZero(session.kek)
+    if (session?.kek) {
+      secureZero(session.kek)
+      // Anything still holding this record sees no key rather than a spent one.
+      session.kek = undefined
+    }
     sessions.delete(sessionId)
   }
 }
